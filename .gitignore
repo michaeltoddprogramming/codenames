@@ -1,0 +1,15 @@
+docs.md
+
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/.terraform.lock.hcl
+terraform/private_key.pem
+
+terraform/runner/.terraform/
+terraform/runner/*.tfstate
+terraform/runner/*.tfstate.*
+terraform/runner/*.tfvars
+terraform/runner/.terraform.lock.hcl
+terraform/runner/private_key.pem
