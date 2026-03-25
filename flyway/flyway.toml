@@ -1,0 +1,7 @@
+[flyway]
+locations = ["filesystem:./data", "filesystem:./migrations", "filesystem:./programmability"]
+
+[environments.default]
+url = ""
+user = ""
+password = ""
