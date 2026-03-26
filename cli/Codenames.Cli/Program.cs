@@ -1,16 +1,11 @@
-﻿using Spectre.Console;
+using Codenames.Cli;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Codenames.Cli;
+var host = AppHost.Build(args);
+await host.StartAsync();
 
-public class Program
-{
-    static void Main(string[] args)
-    {
-        var figlet = new FigletText("Codenames CLI")
-            .Color(Color.Blue);
-  
-        AnsiConsole.Write(figlet);
-        AnsiConsole.MarkupLine("Press any key to exit...");
-        Console.ReadKey();
-    }
-}
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+await host.Services.GetRequiredService<AppRunner>().RunAsync(cts.Token);
+await host.StopAsync();
