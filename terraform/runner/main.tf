@@ -17,8 +17,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ── 1. VPC + Networking ──
-
 resource "aws_vpc" "runner_vpc" {
   cidr_block           = "10.1.0.0/16"
   enable_dns_support   = true
@@ -51,22 +49,21 @@ resource "aws_subnet" "runner_subnet" {
 resource "aws_route_table" "runner_rt" {
   vpc_id = aws_vpc.runner_vpc.id
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.runner_igw.id
-  }
-
   tags = {
     Name = "${var.runner_name}-rt"
   }
+}
+
+resource "aws_route" "runner_internet" {
+  route_table_id         = aws_route_table.runner_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.runner_igw.id
 }
 
 resource "aws_route_table_association" "runner_rta" {
   subnet_id      = aws_subnet.runner_subnet.id
   route_table_id = aws_route_table.runner_rt.id
 }
-
-# ── 2. IAM Role (so runner can run Terraform with AWS access) ──
 
 resource "aws_iam_role" "runner_role" {
   name = "${var.runner_name}-role"
@@ -109,12 +106,11 @@ resource "aws_iam_role_policy_attachment" "runner_rds" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonRDSFullAccess"
 }
 
+
 resource "aws_iam_instance_profile" "runner_profile" {
   name = "${var.runner_name}-profile"
   role = aws_iam_role.runner_role.name
 }
-
-# ── 3. Security Group ──
 
 resource "aws_security_group" "runner_sg" {
   name        = "${var.runner_name}-sg"
@@ -140,8 +136,6 @@ resource "aws_security_group" "runner_sg" {
   }
 }
 
-# ── 4. SSH Key Pair ──
-
 resource "tls_private_key" "pk" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -157,8 +151,6 @@ resource "local_file" "ssh_key" {
   filename        = "${path.module}/private_key.pem"
   file_permission = "0400"
 }
-
-# ── 5. Runner EC2 Instance ──
 
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -193,8 +185,6 @@ resource "aws_instance" "gitlab_runner" {
     Name = var.runner_name
   }
 }
-
-# ── 6. Outputs ──
 
 output "public_ip" {
   value = aws_instance.gitlab_runner.public_ip

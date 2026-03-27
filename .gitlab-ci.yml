@@ -1,6 +1,7 @@
 stages:
   - test
   - infrastructure
+  - migrate
   - deploy
   - destroy
 
@@ -32,6 +33,26 @@ infrastructure:
   artifacts:
     reports:
       dotenv: deploy.env
+
+migrate:
+  stage: migrate
+  image:
+    name: redgate/flyway:latest
+    entrypoint: [""]
+  needs:
+    - infrastructure
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  tags:
+    - aws-runner
+  script:
+    - |
+      flyway \
+        -url="jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME" \
+        -user="$DB_USERNAME" \
+        -password="$DB_PASSWORD" \
+        -locations="filesystem:./flyway/migrations,filesystem:./flyway/data,filesystem:./flyway/programmability" \
+        migrate
 
 destroy_infra:
   stage: destroy

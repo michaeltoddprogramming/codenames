@@ -82,14 +82,15 @@ resource "aws_internet_gateway" "gw" {
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
-  }
-
   tags = {
     Name = "codenames-public-rt"
   }
+}
+
+resource "aws_route" "public_internet" {
+  route_table_id         = aws_route_table.public_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.gw.id
 }
 
 resource "aws_route_table" "private_rt" {
@@ -174,6 +175,14 @@ resource "aws_security_group" "db_sg" {
     security_groups = [aws_security_group.ec2_sg.id]
   }
 
+  ingress {
+    description = "PostgreSQL from runner VPC via peering"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["10.1.0.0/16"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -185,6 +194,46 @@ resource "aws_security_group" "db_sg" {
     Name = "codenames-db-sg"
   }
 }
+
+data "aws_vpc" "runner" {
+  cidr_block = "10.1.0.0/16"
+}
+
+data "aws_route_table" "runner" {
+  filter {
+    name   = "tag:Name"
+    values = ["codenames-gitlab-runner-rt"]
+  }
+}
+
+resource "aws_vpc_peering_connection" "main_to_runner" {
+  vpc_id      = aws_vpc.main.id
+  peer_vpc_id = data.aws_vpc.runner.id
+  auto_accept = true
+
+  tags = {
+    Name = "codenames-main-to-runner"
+  }
+}
+
+resource "aws_route" "main_to_runner" {
+  route_table_id            = aws_route_table.public_rt.id
+  destination_cidr_block    = "10.1.0.0/16"
+  vpc_peering_connection_id = aws_vpc_peering_connection.main_to_runner.id
+}
+
+resource "aws_route" "private_to_runner" {
+  route_table_id            = aws_route_table.private_rt.id
+  destination_cidr_block    = "10.1.0.0/16"
+  vpc_peering_connection_id = aws_vpc_peering_connection.main_to_runner.id
+}
+
+resource "aws_route" "runner_to_main" {
+  route_table_id            = data.aws_route_table.runner.id
+  destination_cidr_block    = "10.0.0.0/16"
+  vpc_peering_connection_id = aws_vpc_peering_connection.main_to_runner.id
+}
+
 
 resource "tls_private_key" "pk" {
   algorithm = "RSA"
