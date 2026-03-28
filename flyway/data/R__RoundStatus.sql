@@ -1,3 +1,3 @@
-INSERT INTO round_status (status_name) VALUES
+INSERT INTO round_status (round_status) VALUES
     ('active'),
     ('resolved');
