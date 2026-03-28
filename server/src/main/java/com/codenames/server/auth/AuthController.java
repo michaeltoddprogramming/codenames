@@ -36,8 +36,8 @@ public class AuthController {
         String email = payload.getEmail();
         String name  = (String) payload.get("name");
 
-        User user   = userStore.findOrCreate(sub, email, name);
-        String token = tokenService.generateToken(user);
+        User user    = userStore.findOrCreate(sub, email, name);
+        String token = tokenService.generateToken(user, name);
 
         return ResponseEntity.ok(new AuthResponse(token, email, name));
     }

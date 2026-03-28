@@ -1,17 +1,31 @@
 package com.codenames.server.user;
 
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class UserStore {
 
-    private final ConcurrentHashMap<String, User> byOauthSub = new ConcurrentHashMap<>();
+    private final JdbcTemplate jdbcTemplate;
 
-    public User findOrCreate(String sub, String email, String name) {
-        return byOauthSub.computeIfAbsent(sub,
-                key -> new User(UUID.randomUUID().toString(), email, name, sub));
+    public UserStore(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public User findOrCreate(String oauthSubject, String email, String username) {
+        return jdbcTemplate.queryForObject(
+            """
+            INSERT INTO "user" (username, email, oauth_provider, oauth_subject)
+            VALUES (?, ?, 'google', ?)
+            ON CONFLICT (oauth_provider, oauth_subject) DO UPDATE SET updated_at = NOW()
+            RETURNING user_id, username, email
+            """,
+            (resultSet, rowNumber) -> new User(
+                resultSet.getInt("user_id"),
+                resultSet.getString("email"),
+                resultSet.getString("username")
+            ),
+            username, email, oauthSubject
+        );
     }
 }

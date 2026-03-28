@@ -1,3 +1,3 @@
 package com.codenames.server.user;
 
-public record User(String id, String email, String name, String oauthSub) {}
+public record User(int userId, String email, String username) {}

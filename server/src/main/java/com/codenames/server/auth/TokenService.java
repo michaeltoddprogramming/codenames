@@ -27,11 +27,11 @@ public class TokenService {
         key = Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    public String generateToken(User user) {
+    public String generateToken(User user, String name) {
         return Jwts.builder()
-                .subject(user.id())
+                .subject(String.valueOf(user.userId()))
                 .claim("email", user.email())
-                .claim("name", user.name())
+                .claim("name", name)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(key)

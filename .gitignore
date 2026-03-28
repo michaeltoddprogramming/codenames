@@ -2,10 +2,12 @@ docs.md
 .claude/
 .env
 
+flyway.toml
 scripts/
 target/
 
-.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-w
+wrapper.jar
 
 terraform/.terraform/
 terraform/*.tfstate

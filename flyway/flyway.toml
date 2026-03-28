@@ -2,6 +2,6 @@
 locations = ["filesystem:./data", "filesystem:./migrations", "filesystem:./programmability"]
 
 [environments.default]
-url = ""
-user = ""
-password = ""
+url = "jdbc:postgresql://localhost:5432/codenames"                              
+user = "codenames"
+password = "codenames"
