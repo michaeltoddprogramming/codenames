@@ -1,4 +1,11 @@
 docs.md
+.claude/
+
+scripts/
+target/
+
+application.properties
+.mvn/wrapper/maven-wrapper.jar
 
 terraform/.terraform/
 terraform/*.tfstate
