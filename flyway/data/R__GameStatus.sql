@@ -1,3 +1,3 @@
-INSERT INTO game_status (status_name) VALUES
+INSERT INTO game_status (game_status) VALUES
     ('active'),
     ('finished');

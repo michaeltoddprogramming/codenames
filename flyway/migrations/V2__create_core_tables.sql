@@ -6,7 +6,7 @@ CREATE TABLE "user" (
     oauth_subject  VARCHAR(255) NOT NULL,
     is_deleted     BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE game (
@@ -14,7 +14,7 @@ CREATE TABLE game (
     game_status_id INT         NOT NULL,
     is_deleted     BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE game_participant (
@@ -25,7 +25,7 @@ CREATE TABLE game_participant (
     participant_role_id INT         NOT NULL,
     is_deleted          BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE game_word (
@@ -36,7 +36,7 @@ CREATE TABLE game_word (
     is_revealed  BOOLEAN      NOT NULL DEFAULT FALSE,
     is_deleted   BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE game_round (
@@ -49,7 +49,7 @@ CREATE TABLE game_round (
     expires_at      TIMESTAMPTZ  NOT NULL,
     is_deleted      BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE round_vote (

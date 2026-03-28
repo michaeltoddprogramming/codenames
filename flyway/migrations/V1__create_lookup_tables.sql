@@ -47,7 +47,7 @@ ALTER TABLE round_status
 ADD CONSTRAINT unique_round_status UNIQUE (round_status);
 
 ALTER TABLE reveal_outcome
-ADD CONSTRAINT unique_reveal_outcome UNIQUE (reveal_outcome);
+ADD CONSTRAINT unique_outcome_name UNIQUE (outcome_name);
 
 ALTER TABLE game_team
 ADD CONSTRAINT unique_team_name UNIQUE (team_name);
