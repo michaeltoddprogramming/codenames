@@ -2,17 +2,17 @@ namespace Codenames.Cli.Tui;
 
 public class KeyboardHandler
 {
-    public async Task<ConsoleKeyInfo> ReadKeyAsync(CancellationToken ct = default)
+    public async Task<ConsoleKeyInfo> ReadKeyAsync(CancellationToken cancellationToken = default)
     {
-        while (!ct.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             if (Console.KeyAvailable)
                 return Console.ReadKey(intercept: true);
 
-            await Task.Delay(50, ct);
+            await Task.Delay(50, cancellationToken);
         }
 
-        ct.ThrowIfCancellationRequested();
+        cancellationToken.ThrowIfCancellationRequested();
         return default;
     }
 }

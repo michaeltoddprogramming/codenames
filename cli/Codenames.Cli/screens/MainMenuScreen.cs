@@ -1,21 +1,17 @@
+using Codenames.Cli.Auth;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
 
 namespace Codenames.Cli.Screens;
 
-public class WelcomeScreen(
+public class MainMenuScreen(
+    AuthSession authSession,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
-    INavigator navigator,
-    ILogger<WelcomeScreen> logger) : IScreen
+    ILogger<MainMenuScreen> logger) : IScreen
 {
-    private static readonly string[] MenuItems = ["Login", "Quit"];
-
-    private readonly TerminalRenderer _renderer = renderer;
-    private readonly KeyboardHandler _keyboard = keyboard;
-    private readonly INavigator _navigator = navigator;
-    private readonly ILogger<WelcomeScreen> _logger = logger;
+    private static readonly string[] MenuItems = ["Quit"];
 
     private int _selectedIndex;
 
@@ -25,7 +21,7 @@ public class WelcomeScreen(
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var key = await _keyboard.ReadKeyAsync(cancellationToken);
+            var key = await keyboard.ReadKeyAsync(cancellationToken);
 
             switch (key.Key)
             {
@@ -40,7 +36,7 @@ public class WelcomeScreen(
                     break;
 
                 case ConsoleKey.Enter:
-                    await ExecuteSelectionAsync(cancellationToken);
+                    ExecuteSelection();
                     return;
             }
         }
@@ -48,25 +44,23 @@ public class WelcomeScreen(
 
     private void Draw()
     {
-        _renderer.Clear();
-        _renderer.RenderHeader("Codenames");
-        _renderer.RenderBlankLine();
+        renderer.Clear();
+        renderer.RenderHeader("Codenames");
+        renderer.RenderBlankLine();
+        renderer.RenderStatus($"Welcome, {authSession.Name ?? authSession.Email}!");
+        renderer.RenderBlankLine();
 
         for (var i = 0; i < MenuItems.Length; i++)
-            _renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
+            renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
     }
 
-    private Task ExecuteSelectionAsync(CancellationToken cancellationToken)
+    private void ExecuteSelection()
     {
         switch (MenuItems[_selectedIndex])
         {
-            case "Login":
-                return _navigator.GoToAsync(ScreenName.Login, cancellationToken);
             case "Quit":
-                _logger.LogInformation("User quit");
+                logger.LogInformation("User {Email} quit", authSession.Email);
                 break;
         }
-
-        return Task.CompletedTask;
     }
 }

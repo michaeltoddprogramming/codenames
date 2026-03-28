@@ -19,4 +19,10 @@ public class TerminalRenderer
             : new Style(foreground: Color.Silver);
         AnsiConsole.Write(new Text($"{prefix}{label}\n", style));
     }
+
+    public void RenderStatus(string message) =>
+        AnsiConsole.Write(new Text($"  {message}\n", new Style(foreground: Color.Aqua)));
+
+    public void RenderError(string message) =>
+        AnsiConsole.Write(new Text($"  {message}\n", new Style(foreground: Color.Red)));
 }

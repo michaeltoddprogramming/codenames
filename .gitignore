@@ -1,10 +1,10 @@
 docs.md
 .claude/
+.env
 
 scripts/
 target/
 
-application.properties
 .mvn/wrapper/maven-wrapper.jar
 
 terraform/.terraform/

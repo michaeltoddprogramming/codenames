@@ -9,7 +9,7 @@ public class AppRunner(INavigator navigator, ILogger<AppRunner> logger)
     private readonly INavigator _navigator = navigator;
     private readonly ILogger<AppRunner> _logger = logger;
 
-    public async Task RunAsync(CancellationToken ct = default)
+    public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
@@ -19,7 +19,7 @@ public class AppRunner(INavigator navigator, ILogger<AppRunner> logger)
 
         try
         {
-            await _navigator.GoToAsync(ScreenName.Welcome, ct);
+            await _navigator.GoToAsync(ScreenName.Welcome, cancellationToken);
         }
         catch (OperationCanceledException)
         {

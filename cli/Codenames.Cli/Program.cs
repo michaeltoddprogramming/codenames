@@ -1,5 +1,8 @@
 using Codenames.Cli;
+using DotNetEnv;
 using Microsoft.Extensions.DependencyInjection;
+
+Env.TraversePath().Load();
 
 var host = AppHost.Build(args);
 await host.StartAsync();

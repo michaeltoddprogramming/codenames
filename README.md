@@ -9,6 +9,52 @@ Two teams race to uncover their secret words, guided only by cryptic one-word cl
 - Massamba Maphalala
 - Michael Todd
 
-Tech stack: TBD.
-Timeline: We'll figure it out.
-Documentation: You're looking at it.
+Tech stack: Java 26 / Spring Boot · .NET 10 / C# · PostgreSQL · AWS (af-south-1)
+
+## Local Development
+
+### Prerequisites
+
+- Java 26
+- Maven 3.9+
+- .NET 10 SDK
+
+### Server
+
+**1. Create `server/.env`**:
+
+```
+JWT_SECRET=<your-secret>
+```
+
+Generate a secret with:
+
+```bash
+openssl rand -base64 32
+```
+
+**2. Run:**
+
+```bash
+cd server
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8080`.
+
+### CLI
+
+**1. Create `cli/Codenames.Cli/.env`**:
+
+```
+Auth__GoogleClientSecret=<google-oauth-client-secret>
+```
+
+**2. Run:**
+
+```bash
+cd cli/Codenames.Cli
+dotnet run
+```
+
+Select **Login** — a browser window opens for Google sign-in. After authenticating you'll be returned to the main menu.

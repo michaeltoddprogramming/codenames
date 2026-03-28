@@ -2,5 +2,5 @@ namespace Codenames.Cli.Screens;
 
 public interface IScreen
 {
-    Task RenderAsync(CancellationToken ct = default);
+    Task RenderAsync(CancellationToken cancellationToken = default);
 }

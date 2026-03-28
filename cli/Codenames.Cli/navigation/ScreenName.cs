@@ -2,5 +2,7 @@ namespace Codenames.Cli.Navigation;
 
 public enum ScreenName
 {
-    Welcome
+    Welcome,
+    Login,
+    MainMenu,
 }
