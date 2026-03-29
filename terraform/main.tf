@@ -277,6 +277,8 @@ resource "aws_instance" "server" {
     chmod 600 /home/ec2-user/.ssh/authorized_keys
   EOF
 
+  user_data_replace_on_change = true
+
   tags = {
     Name = "codenames-server"
   }
