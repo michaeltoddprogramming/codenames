@@ -270,6 +270,13 @@ resource "aws_instance" "server" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
 
+  user_data = <<-EOF
+    #!/bin/bash
+    echo "${var.ssh_public_key}" > /home/ec2-user/.ssh/authorized_keys
+    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+    chmod 600 /home/ec2-user/.ssh/authorized_keys
+  EOF
+
   tags = {
     Name = "codenames-server"
   }
