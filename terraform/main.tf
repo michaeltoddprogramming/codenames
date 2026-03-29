@@ -87,11 +87,6 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
-import {
-  to = aws_route.public_internet
-  id = "rtb-0df3829d6cd3e01aa_0.0.0.0/0"
-}
-
 resource "aws_route" "public_internet" {
   route_table_id         = aws_route_table.public_rt.id
   destination_cidr_block = "0.0.0.0/0"
@@ -248,20 +243,9 @@ resource "aws_route" "runner_to_main" {
 }
 
 
-resource "tls_private_key" "pk" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
 resource "aws_key_pair" "kp" {
   key_name   = "codenames-key"
-  public_key = tls_private_key.pk.public_key_openssh
-}
-
-resource "local_file" "ssh_key" {
-  content         = tls_private_key.pk.private_key_pem
-  filename        = "${path.module}/private_key.pem"
-  file_permission = "0400"
+  public_key = var.ssh_public_key
 }
 
 data "aws_ami" "amazon_linux" {
@@ -325,7 +309,7 @@ output "ec2_public_ip" {
 }
 
 output "ssh_command" {
-  value = "ssh -i private_key.pem ec2-user@${aws_instance.server.public_ip}"
+  value = "ssh -i ~/.ssh/codenames-key ec2-user@${aws_instance.server.public_ip}"
 }
 
 output "db_host" {
