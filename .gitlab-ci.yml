@@ -1,6 +1,7 @@
 stages:
   - test
   - infrastructure
+  - start_db
   - migrate
   - deploy
   - destroy
@@ -36,13 +37,52 @@ infrastructure:
     reports:
       dotenv: deploy.env
 
+start_db:
+  stage: start_db
+  image:
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  needs:
+    - infrastructure
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  tags:
+    - aws-runner
+  script:
+    - |
+      STATUS=$(aws rds describe-db-instances \
+        --db-instance-identifier codenames-db \
+        --query 'DBInstances[0].DBInstanceStatus' \
+        --output text \
+        --region af-south-1)
+      echo "RDS status: $STATUS"
+      if [ "$STATUS" = "stopped" ]; then
+        echo "Starting RDS instance..."
+        aws rds start-db-instance \
+          --db-instance-identifier codenames-db \
+          --region af-south-1
+        echo "Waiting for RDS to become available..."
+        aws rds wait db-instance-available \
+          --db-instance-identifier codenames-db \
+          --region af-south-1
+        echo "RDS is now available."
+      elif [ "$STATUS" = "available" ]; then
+        echo "RDS is already running."
+      else
+        echo "RDS is in state: $STATUS. Waiting for it to become available..."
+        aws rds wait db-instance-available \
+          --db-instance-identifier codenames-db \
+          --region af-south-1
+        echo "RDS is now available."
+      fi
+
 migrate:
   stage: migrate
   image:
     name: redgate/flyway:latest
     entrypoint: [""]
   needs:
-    - infrastructure
+    - start_db
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   tags:
