@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net;
@@ -7,9 +8,12 @@ using System.Text.Json;
 
 namespace Codenames.Cli.Auth;
 
-public class AuthService(IOptions<AuthConfig> options)
+public class AuthService(IOptions<AuthConfig> options, HttpClient http, ILogger<AuthService> logger)
 {
     private readonly AuthConfig _config = options.Value;
+    private readonly ILogger<AuthService> _logger = logger;
+
+    private static readonly TimeSpan _listenerTimeout = TimeSpan.FromMinutes(2);
 
     public async Task<string> GetGoogleIdTokenAsync(CancellationToken cancellationToken = default)
     {
@@ -21,15 +25,42 @@ public class AuthService(IOptions<AuthConfig> options)
 
         using var listener = new HttpListener();
         listener.Prefixes.Add(_config.ListenerPrefix);
-        listener.Start();
+
+        try
+        {
+            listener.Start();
+        }
+        catch (HttpListenerException ex)
+        {
+            _logger.LogError(ex, "Failed to start HTTP listener.");
+            throw new InvalidOperationException(
+                $"Failed to start HTTP listener on {_config.ListenerPrefix}.");
+        }
 
         OpenBrowser(authUrl);
 
-        var context       = await listener.GetContextAsync().WaitAsync(cancellationToken);
+        using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cancellationTokenSource.CancelAfter(_listenerTimeout);
+
+        using var stopOnCancel = cancellationTokenSource.Token.Register(() =>
+        {
+            try { listener.Stop(); } catch {}
+        });
+
+        HttpListenerContext context;
+        try
+        {
+            context = await listener.GetContextAsync();
+        }
+        catch (HttpListenerException) when (cancellationTokenSource.Token.IsCancellationRequested)
+        {
+            throw new TimeoutException("Timed out waiting for authentication response.");
+        }
+
         var code          = context.Request.QueryString["code"];
         var returnedState = context.Request.QueryString["state"];
 
-        var responseBytes = "Auth complete. You can close this tab"u8.ToArray();
+        var responseBytes = Encoding.UTF8.GetBytes("Auth complete. You can close this tab.");
         context.Response.ContentLength64 = responseBytes.Length;
         await context.Response.OutputStream.WriteAsync(responseBytes, cancellationToken);
         context.Response.Close();
@@ -65,8 +96,6 @@ public class AuthService(IOptions<AuthConfig> options)
 
     private async Task<string> ExchangeCodeAsync(string code, string codeVerifier, CancellationToken cancellationToken)
     {
-        using var http = new HttpClient();
-
         var form = new Dictionary<string, string>
         {
             ["code"]          = code,
@@ -77,17 +106,25 @@ public class AuthService(IOptions<AuthConfig> options)
             ["code_verifier"] = codeVerifier,
         };
 
-        var resp = await http.PostAsync(
-            "https://oauth2.googleapis.com/token",
-            new FormUrlEncodedContent(form),
-            cancellationToken);
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.PostAsync(
+                "https://oauth2.googleapis.com/token",
+                new FormUrlEncodedContent(form),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to call Google token endpoint.", ex);
+        }
 
-        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        if (!resp.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Token exchange failed: {body}");
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Token exchange failed ({response.StatusCode}): {body}");
 
-        var doc = JsonDocument.Parse(body);
+        using var doc = JsonDocument.Parse(body);
         if (!doc.RootElement.TryGetProperty("id_token", out var idTokenProp))
             throw new InvalidOperationException($"No id_token in response: {body}");
 
@@ -96,12 +133,19 @@ public class AuthService(IOptions<AuthConfig> options)
 
     private static void OpenBrowser(string url)
     {
-        if (OperatingSystem.IsMacOS())
-            Process.Start("open", url);
-        else if (OperatingSystem.IsWindows())
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        else
-            Process.Start("xdg-open", url);
+        try
+        {
+            if (OperatingSystem.IsMacOS())
+                Process.Start("open", url);
+            else if (OperatingSystem.IsWindows())
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            else
+                Process.Start("xdg-open", url);
+        }
+        catch
+        {
+            Console.WriteLine($"Please open this URL manually:\n{url}");
+        }
     }
 
     private static string GenerateCodeVerifier() =>

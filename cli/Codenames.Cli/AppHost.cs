@@ -26,7 +26,7 @@ public static class AppHost
                 // Auth
                 services.Configure<AuthConfig>(ctx.Configuration.GetSection(AuthConfig.Section));
                 services.AddSingleton<AuthSession>();
-                services.AddSingleton<AuthService>();
+                services.AddHttpClient<AuthService>();
                 services.AddHttpClient<ServerClient>((sp, client) =>
                 {
                     var config = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AuthConfig>>().Value;
