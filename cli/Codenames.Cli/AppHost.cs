@@ -1,9 +1,11 @@
+using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Screens;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 namespace Codenames.Cli;
@@ -26,12 +28,17 @@ public static class AppHost
                 // Auth
                 services.Configure<AuthConfig>(ctx.Configuration.GetSection(AuthConfig.Section));
                 services.AddSingleton<AuthSession>();
-                services.AddHttpClient<AuthService>();
-                services.AddHttpClient<ServerClient>((sp, client) =>
+                services.AddSingleton<AuthService>();
+
+                // API
+                services.AddHttpClient<ApiClient>((serviceProvider, client) =>
                 {
-                    var config = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AuthConfig>>().Value;
+                    var config = serviceProvider.GetRequiredService<IOptions<AuthConfig>>().Value;
                     client.BaseAddress = new Uri(config.ServerBaseUrl);
                 });
+                services.AddTransient<AuthApiClient>();
+                services.AddTransient<LobbyApiClient>();
+                services.AddTransient<GameApiClient>();
 
                 // Screens
                 services.AddTransient<WelcomeScreen>();

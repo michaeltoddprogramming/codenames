@@ -1,3 +1,4 @@
+using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
@@ -7,7 +8,7 @@ namespace Codenames.Cli.Screens;
 
 public class LoginScreen(
     AuthService authService,
-    ServerClient serverClient,
+    AuthApiClient authApiClient,
     AuthSession authSession,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
@@ -27,7 +28,7 @@ public class LoginScreen(
 
             renderer.RenderStatus("Verifying with server...");
 
-            var response = await serverClient.AuthenticateAsync(idToken, cancellationToken);
+            var response = await authApiClient.LoginAsync(idToken, cancellationToken);
             authSession.Set(response.Token, response.Email, response.Name);
 
             logger.LogInformation("User {Email} authenticated", response.Email);
