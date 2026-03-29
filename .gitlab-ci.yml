@@ -95,6 +95,8 @@ migrate:
         -user="$DB_ADMIN_USER" \
         -password="$DB_ADMIN_PASSWORD" \
         -locations="filesystem:./flyway/migrations,filesystem:./flyway/data,filesystem:./flyway/programmability" \
+        -placeholders.db_user="$DB_USER" \
+        -placeholders.db_user_password="$DB_USER_PASSWORD" \
         migrate
 
 destroy_infra:
