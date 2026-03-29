@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.4</version>
+        <version>4.0.5</version>
         <relativePath/>
     </parent>
 
@@ -19,6 +19,18 @@
     <properties>
         <java.version>26</java.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>me.paulschwarz</groupId>
+                <artifactId>spring-dotenv-bom</artifactId>
+                <version>5.1.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -34,36 +46,36 @@
         <dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>
-            <version>2.7.0</version>
+            <version>2.9.0</version>
         </dependency>
 
         <!-- Game JWT issuance -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.12.6</version>
+            <version>0.13.0</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
-            <version>0.12.6</version>
+            <version>0.13.0</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.6</version>
+            <version>0.13.0</version>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- .env file support -->
+        <!-- .env file support (Spring Boot 4) -->
         <dependency>
             <groupId>me.paulschwarz</groupId>
-            <artifactId>spring-dotenv</artifactId>
-            <version>4.0.0</version>
+            <artifactId>springboot4-dotenv</artifactId>
+            <optional>true</optional>
         </dependency>
 
-         <dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
