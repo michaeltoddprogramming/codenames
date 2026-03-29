@@ -82,6 +82,7 @@ migrate:
     name: redgate/flyway:latest
     entrypoint: [""]
   needs:
+    - infrastructure
     - start_db
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
