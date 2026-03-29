@@ -216,6 +216,14 @@ resource "aws_vpc_peering_connection" "main_to_runner" {
   peer_vpc_id = data.aws_vpc.runner.id
   auto_accept = true
 
+  requester {
+    allow_remote_vpc_dns_resolution = true
+  }
+
+  accepter {
+    allow_remote_vpc_dns_resolution = true
+  }
+
   tags = {
     Name = "codenames-main-to-runner"
   }
