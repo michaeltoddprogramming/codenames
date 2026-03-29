@@ -1,6 +1,7 @@
 docs.md
 .claude/
 .env
+.idea/
 
 flyway.toml
 scripts/

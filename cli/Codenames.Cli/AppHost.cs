@@ -40,6 +40,13 @@ public static class AppHost
                 services.AddTransient<LobbyApiClient>();
                 services.AddTransient<GameApiClient>();
 
+                // SSE
+                services.AddHttpClient<SseClient>((serviceProvider, client) =>
+                {
+                    var config = serviceProvider.GetRequiredService<IOptions<AuthConfig>>().Value;
+                    client.BaseAddress = new Uri(config.ServerBaseUrl);
+                });
+
                 // Screens
                 services.AddTransient<WelcomeScreen>();
                 services.AddTransient<LoginScreen>();
