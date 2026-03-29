@@ -87,6 +87,11 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
+import {
+  to = aws_route.public_internet
+  id = "rtb-0df3829d6cd3e01aa_0.0.0.0/0"
+}
+
 resource "aws_route" "public_internet" {
   route_table_id         = aws_route_table.public_rt.id
   destination_cidr_block = "0.0.0.0/0"
