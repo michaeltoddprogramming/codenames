@@ -1,0 +1,4 @@
+db_admin_user     = "codenames_admin"
+db_admin_password = "your-admin-password"
+db_user           = "codenames_user"
+db_user_password  = "your-app-password"

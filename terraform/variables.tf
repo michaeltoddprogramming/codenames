@@ -16,13 +16,35 @@ variable "db_name" {
   default     = "codenames"
 }
 
-variable "db_username" {
-  description = "Database admin username"
+variable "db_admin_user" {
+  description = "Database admin username (used by Flyway migrations)"
   type        = string
 }
 
-variable "db_password" {
-  description = "Database admin password"
+variable "db_admin_password" {
+  description = "Database admin password (used by Flyway migrations)"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_user" {
+  description = "Database app username (used by the server at runtime)"
+  type        = string
+}
+
+variable "db_user_password" {
+  description = "Database app password (used by the server at runtime)"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_app_username" {
+  description = "Limited app user username (used by the server at runtime)"
+  type        = string
+}
+
+variable "db_app_password" {
+  description = "Limited app user password (used by the server at runtime)"
   type        = string
   sensitive   = true
 }

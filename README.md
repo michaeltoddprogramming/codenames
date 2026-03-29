@@ -21,13 +21,13 @@ Tech stack: Java 26 / Spring Boot · .NET 10 / C# · PostgreSQL · AWS (af-south
 
 ### Server
 
-**1. Create `server/.env`**:
+**1. Create `server/.env`** from the example:
 
-```
-JWT_SECRET=<your-secret>
+```bash
+cp server/.env.example server/.env
 ```
 
-Generate a secret with:
+Then fill in the values — generate a JWT secret with:
 
 ```bash
 openssl rand -base64 32
@@ -44,11 +44,13 @@ The server starts on `http://localhost:8080`.
 
 ### CLI
 
-**1. Create `cli/Codenames.Cli/.env`**:
+**1. Create `cli/Codenames.Cli/.env`** from the example:
 
+```bash
+cp cli/Codenames.Cli/.env.example cli/Codenames.Cli/.env
 ```
-Auth__GoogleClientSecret=<google-oauth-client-secret>
-```
+
+Then fill in the Google OAuth client secret (get it from the Google Cloud Console).
 
 **2. Run:**
 
@@ -58,3 +60,25 @@ dotnet run
 ```
 
 Select **Login** — a browser window opens for Google sign-in. After authenticating you'll be returned to the main menu.
+
+### Infrastructure (local Terraform only)
+
+If you need to run Terraform locally:
+
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+# fill in real values, then:
+cd terraform
+terraform init
+terraform apply
+```
+
+For the runner:
+
+```bash
+cp terraform/runner/terraform.tfvars.example terraform/runner/terraform.tfvars
+# fill in your GitLab registration token, then:
+cd terraform/runner
+terraform init
+terraform apply
+```

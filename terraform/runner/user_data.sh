@@ -17,6 +17,11 @@ gitlab-runner register \
   --token "${registration_token}" \
   --executor "docker" \
   --docker-image "alpine:latest" \
-  --description "codenames-aws-runner"
+  --description "codenames-aws-runner" \
+  --tag-list "${runner_tags}" \
+  --run-untagged="true" \
+  --locked="false" \
+  --access-level="not_protected"
 
+systemctl enable gitlab-runner
 gitlab-runner start
