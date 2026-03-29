@@ -38,13 +38,3 @@ variable "db_user_password" {
   sensitive   = true
 }
 
-variable "db_app_username" {
-  description = "Limited app user username (used by the server at runtime)"
-  type        = string
-}
-
-variable "db_app_password" {
-  description = "Limited app user password (used by the server at runtime)"
-  type        = string
-  sensitive   = true
-}
