@@ -61,6 +61,41 @@ dotnet run
 
 Select **Login** — a browser window opens for Google sign-in. After authenticating you'll be returned to the main menu.
 
+### Connecting to the deployed server
+
+```bash
+DOTNET_ENVIRONMENT=Production dotnet run
+```
+
+This uses `appsettings.Production.json` which points the CLI at the deployed server instead of localhost.
+
+## CI/CD Pipeline
+
+Pushes to `main` trigger the full pipeline:
+
+| Stage | Job | What it does |
+|-------|-----|-------------|
+| test | SAST, Secret Detection | GitLab security scans |
+| build | build_jar | Compiles Spring Boot JAR with JDK 26 |
+| infrastructure | infrastructure | Terraform provisions VPC, EC2, RDS |
+| start_db | start_db | Starts RDS if stopped (cost saving) |
+| migrate | migrate | Flyway database migrations |
+| deploy | deploy | Uploads JAR + env to EC2, restarts service |
+| destroy | destroy_infra | Terraform destroy (manual trigger) |
+
+### CI/CD Variables
+
+All required secrets and configuration (SSH keys, DB credentials, AWS credentials, JWT secret) are configured in GitLab CI/CD variables (Settings > CI/CD > Variables).
+
+### EC2 Server
+
+The EC2 instance is provisioned via Terraform user_data (cloud-init):
+
+- Amazon Linux 2023 (ARM64, t4g.micro)
+- Oracle JDK 26
+- Nginx as HTTPS reverse proxy (self-signed TLS cert, port 443 -> 8080)
+- Spring Boot runs as a systemd service with auto-restart
+
 ### Infrastructure (local Terraform only)
 
 If you need to run Terraform locally:

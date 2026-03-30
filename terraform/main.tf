@@ -270,13 +270,121 @@ resource "aws_instance" "server" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
 
-  user_data = <<-EOF
-    #!/bin/bash
-    # SSH key setup
-    echo "${var.ssh_public_key}" > /home/ec2-user/.ssh/authorized_keys
-    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
-    chmod 600 /home/ec2-user/.ssh/authorized_keys
-  EOF
+  user_data = <<-USERDATA
+#!/bin/bash
+set -euo pipefail
+exec > /var/log/user-data.log 2>&1
+
+echo "${var.ssh_public_key}" > /home/ec2-user/.ssh/authorized_keys
+chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+chmod 600 /home/ec2-user/.ssh/authorized_keys
+
+JAVA_URL="https://download.oracle.com/java/26/latest/jdk-26_linux-aarch64_bin.tar.gz"
+curl -L -o /tmp/jdk.tar.gz "$JAVA_URL"
+mkdir -p /opt/java
+tar -xzf /tmp/jdk.tar.gz -C /opt/java --strip-components=1
+rm /tmp/jdk.tar.gz
+
+cat > /etc/profile.d/java.sh <<'JEOF'
+export JAVA_HOME=/opt/java
+export PATH=$JAVA_HOME/bin:$PATH
+JEOF
+
+dnf install -y nginx
+
+mkdir -p /etc/nginx/ssl
+
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+
+openssl req -x509 -nodes -days 365 \
+  -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/server.key \
+  -out /etc/nginx/ssl/server.crt \
+  -subj "/CN=codenames-server" \
+  -addext "subjectAltName=IP:$PUBLIC_IP"
+
+cat > /etc/nginx/conf.d/codenames.conf <<'NEOF'
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/ssl/server.crt;
+    ssl_certificate_key /etc/nginx/ssl/server.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;
+    }
+}
+
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+NEOF
+
+cat > /etc/nginx/nginx.conf <<'NGEOF'
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log notice;
+pid /run/nginx.pid;
+include /usr/share/nginx/modules/*.conf;
+events {
+    worker_connections 1024;
+}
+http {
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log /var/log/nginx/access.log main;
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 65;
+    types_hash_max_size 4096;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    include /etc/nginx/conf.d/*.conf;
+}
+NGEOF
+
+systemctl enable nginx
+systemctl start nginx
+
+cat > /etc/systemd/system/codenames.service <<'SEOF'
+[Unit]
+Description=CodeNames Spring Boot Server
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user
+ExecStart=/opt/java/bin/java -Xmx384m -Xms256m -jar /home/ec2-user/codenames-server.jar
+EnvironmentFile=/home/ec2-user/codenames.env
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SEOF
+
+systemctl daemon-reload
+systemctl enable codenames
+
+echo "User data setup complete"
+USERDATA
 
   user_data_replace_on_change = true
 

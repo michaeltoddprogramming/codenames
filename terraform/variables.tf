@@ -43,3 +43,9 @@ variable "ssh_public_key" {
   type        = string
 }
 
+variable "jwt_secret" {
+  description = "JWT signing secret for the Spring Boot server"
+  type        = string
+  sensitive   = true
+}
+

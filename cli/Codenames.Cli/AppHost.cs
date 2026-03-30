@@ -35,6 +35,11 @@ public static class AppHost
                 {
                     var config = serviceProvider.GetRequiredService<IOptions<AuthConfig>>().Value;
                     client.BaseAddress = new Uri(config.ServerBaseUrl);
+                })
+                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback =
+                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
                 });
                 services.AddTransient<AuthApiClient>();
                 services.AddTransient<LobbyApiClient>();

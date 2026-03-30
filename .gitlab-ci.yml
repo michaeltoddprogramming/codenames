@@ -1,5 +1,10 @@
+default:
+  tags:
+    - aws-runner
+
 stages:
   - test
+  - build
   - infrastructure
   - start_db
   - migrate
@@ -10,6 +15,44 @@ include:
   - template: Security/SAST.gitlab-ci.yml
   - template: Security/Secret-Detection.gitlab-ci.yml
 
+build_jar:
+  stage: build
+  image: ubuntu:24.04
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  cache:
+    key: jdk26-maven
+    paths:
+      - .jdk/
+      - .m2/repository/
+  before_script:
+    - |
+      if [ -f .jdk/bin/java ]; then
+        echo "Using cached JDK 26"
+      else
+        apt-get update && apt-get install -y curl
+        ARCH=$(uname -m | sed 's/x86_64/x64/')
+        curl -L -o /tmp/jdk.tar.gz "https://download.oracle.com/java/26/latest/jdk-26_linux-${ARCH}_bin.tar.gz"
+        mkdir -p .jdk && tar -xzf /tmp/jdk.tar.gz -C .jdk --strip-components=1
+        rm /tmp/jdk.tar.gz
+      fi
+    - export JAVA_HOME=$(pwd)/.jdk
+    - export PATH=$JAVA_HOME/bin:$PATH
+    - java -version
+    - |
+      if ! command -v mvn &> /dev/null; then
+        apt-get update 2>/dev/null || true && apt-get install -y maven
+      fi
+  script:
+    - export JAVA_HOME=$(pwd)/.jdk
+    - export PATH=$JAVA_HOME/bin:$PATH
+    - cd server
+    - mvn clean package -DskipTests -B -Dmaven.repo.local=../.m2/repository
+  artifacts:
+    paths:
+      - server/target/*.jar
+    expire_in: 1 hour
+
 infrastructure:
   stage: infrastructure
   image:
@@ -17,8 +60,6 @@ infrastructure:
     entrypoint: [""]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-  tags:
-    - aws-runner
   script:
     - cd terraform
     - terraform init
@@ -33,6 +74,7 @@ infrastructure:
     - echo "DB_ADMIN_PASSWORD=${TF_VAR_db_admin_password}" >> ../deploy.env
     - echo "DB_USER=${TF_VAR_db_user}" >> ../deploy.env
     - echo "DB_USER_PASSWORD=${TF_VAR_db_user_password}" >> ../deploy.env
+    - echo "JWT_SECRET=${TF_VAR_jwt_secret}" >> ../deploy.env
   artifacts:
     reports:
       dotenv: deploy.env
@@ -46,8 +88,6 @@ start_db:
     - infrastructure
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-  tags:
-    - aws-runner
   script:
     - |
       STATUS=$(aws rds describe-db-instances \
@@ -86,8 +126,6 @@ migrate:
     - start_db
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-  tags:
-    - aws-runner
   script:
     - |
       flyway \
@@ -99,6 +137,36 @@ migrate:
         -placeholders.db_user_password="$DB_USER_PASSWORD" \
         migrate
 
+deploy:
+  stage: deploy
+  image: alpine:latest
+  needs:
+    - build_jar
+    - infrastructure
+    - migrate
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh
+    - |
+      cat "$SSH_PRIVATE_KEY" | tr -d '\r' | sed '/^[[:space:]]*$/d' > ~/.ssh/id_rsa
+      echo "" >> ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+  script:
+    - ssh -o StrictHostKeyChecking=no ec2-user@$EC2_PUBLIC_IP "cloud-init status --wait"
+    - |
+      cat > /tmp/codenames.env <<EOF
+      JWT_SECRET=${JWT_SECRET}
+      DB_URL=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME=${DB_USER}
+      DB_PASSWORD=${DB_USER_PASSWORD}
+      EOF
+      sed -i 's/^[[:space:]]*//' /tmp/codenames.env
+    - scp -o StrictHostKeyChecking=no /tmp/codenames.env ec2-user@$EC2_PUBLIC_IP:/home/ec2-user/codenames.env
+    - scp -o StrictHostKeyChecking=no server/target/server-0.0.1-SNAPSHOT.jar ec2-user@$EC2_PUBLIC_IP:/home/ec2-user/codenames-server.jar
+    - ssh -o StrictHostKeyChecking=no ec2-user@$EC2_PUBLIC_IP "sudo systemctl restart codenames && systemctl is-active codenames"
+
 destroy_infra:
   stage: destroy
   image:
@@ -107,8 +175,6 @@ destroy_infra:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
-  tags:
-    - aws-runner
   needs: []
   script:
     - cd terraform
