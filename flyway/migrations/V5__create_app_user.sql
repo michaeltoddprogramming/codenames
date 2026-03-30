@@ -1,4 +1,10 @@
-CREATE USER "${db_user}" WITH PASSWORD '${db_user_password}';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${db_user}') THEN
+        EXECUTE format('CREATE USER %I WITH PASSWORD %L', '${db_user}', '${db_user_password}');
+    END IF;
+END
+$$;
 
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO "${db_user}";
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${db_user}";

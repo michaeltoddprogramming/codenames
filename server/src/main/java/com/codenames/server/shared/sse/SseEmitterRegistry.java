@@ -1,4 +1,4 @@
-package com.codenames.server.sse;
+package com.codenames.server.shared.sse;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;

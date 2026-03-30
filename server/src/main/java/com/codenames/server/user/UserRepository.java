@@ -1,14 +1,14 @@
 package com.codenames.server.user;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
-@Component
-public class UserStore {
+@Repository
+public class UserRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public UserStore(JdbcTemplate jdbcTemplate) {
+    public UserRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 

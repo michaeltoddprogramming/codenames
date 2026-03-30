@@ -1,7 +1,9 @@
 package com.codenames.server.auth;
 
+import com.codenames.server.auth.dto.AuthRequest;
+import com.codenames.server.auth.dto.AuthResponse;
 import com.codenames.server.user.User;
-import com.codenames.server.user.UserStore;
+import com.codenames.server.user.UserRepository;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,15 +19,15 @@ import java.util.Map;
 public class AuthController {
 
     private final GoogleTokenVerifier googleTokenVerifier;
-    private final UserStore userStore;
-    private final TokenService tokenService;
+    private final UserRepository userRepository;
+    private final JwtService jwtService;
 
     public AuthController(GoogleTokenVerifier googleTokenVerifier,
-                          UserStore userStore,
-                          TokenService tokenService) {
+                          UserRepository userRepository,
+                          JwtService jwtService) {
         this.googleTokenVerifier = googleTokenVerifier;
-        this.userStore = userStore;
-        this.tokenService = tokenService;
+        this.userRepository = userRepository;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/google")
@@ -36,8 +38,8 @@ public class AuthController {
         String email = payload.getEmail();
         String name  = (String) payload.get("name");
 
-        User user    = userStore.findOrCreate(sub, email, name);
-        String token = tokenService.generateToken(user, name);
+        User user    = userRepository.findOrCreate(sub, email, name);
+        String token = jwtService.generateToken(user, name);
 
         return ResponseEntity.ok(new AuthResponse(token, email, name));
     }

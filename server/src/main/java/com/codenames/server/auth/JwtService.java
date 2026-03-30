@@ -11,7 +11,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 
 @Service
-public class TokenService {
+public class JwtService {
 
     @Value("${jwt.secret}")
     private String secret;
@@ -23,7 +23,6 @@ public class TokenService {
 
     @PostConstruct
     void init() {
-        // Secret must be at least 32 characters for HMAC-SHA256
         key = Keys.hmacShaKeyFor(secret.getBytes());
     }
 
