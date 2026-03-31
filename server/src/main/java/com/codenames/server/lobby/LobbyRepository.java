@@ -3,6 +3,10 @@ package com.codenames.server.lobby;
 import org.springframework.stereotype.Repository;
 
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,11 +40,29 @@ public class LobbyRepository {
         return Optional.ofNullable(byCode.get(code.toUpperCase()));
     }
 
+    public Optional<Lobby> findByUserId(int userId) {
+        return byId.values().stream()
+                .filter(lobby -> lobby.hasParticipant(userId))
+                .findFirst();
+    }
+
     public void remove(String lobbyId) {
         Lobby lobby = byId.remove(lobbyId);
         if (lobby != null) {
             byCode.remove(lobby.code());
         }
+    }
+
+    public List<String> removeExpired(Duration maxAge) {
+        Instant cutoff = Instant.now().minus(maxAge);
+        List<String> removed = new ArrayList<>();
+        for (Lobby lobby : byId.values()) {
+            if (lobby.createdAt().isBefore(cutoff)) {
+                remove(lobby.lobbyId());
+                removed.add(lobby.lobbyId());
+            }
+        }
+        return removed;
     }
 
     private String generateUniqueCode() {

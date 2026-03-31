@@ -12,6 +12,9 @@ public class ScreenFactory(IServiceProvider services)
         ScreenName.Welcome  => _services.GetRequiredService<WelcomeScreen>(),
         ScreenName.Login    => _services.GetRequiredService<LoginScreen>(),
         ScreenName.MainMenu => _services.GetRequiredService<MainMenuScreen>(),
+        ScreenName.CreateLobby => _services.GetRequiredService<CreateLobbyScreen>(),
+        ScreenName.JoinLobby => _services.GetRequiredService<JoinLobbyScreen>(),
+        ScreenName.LobbyRoom => _services.GetRequiredService<LobbyRoomScreen>(),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown screen")
     };
 }

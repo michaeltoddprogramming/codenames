@@ -1,4 +1,5 @@
 using Codenames.Cli.Auth;
+using Codenames.Cli.Lobby;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
@@ -7,11 +8,13 @@ namespace Codenames.Cli.Screens;
 
 public class MainMenuScreen(
     AuthSession authSession,
+    LobbySession lobbySession,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
+    INavigator navigator,
     ILogger<MainMenuScreen> logger) : IScreen
 {
-    private static readonly string[] MenuItems = ["Quit"];
+    private static readonly string[] MenuItems = ["Create Lobby", "Join Lobby", "Logout"];
 
     private int _selectedIndex;
 
@@ -36,8 +39,13 @@ public class MainMenuScreen(
                     break;
 
                 case ConsoleKey.Enter:
-                    ExecuteSelection();
-                    return;
+                    var shouldExit = await ExecuteSelectionAsync(cancellationToken);
+                    if (shouldExit)
+                    {
+                        return;
+                    }
+                    Draw();
+                    break;
             }
         }
     }
@@ -49,18 +57,27 @@ public class MainMenuScreen(
         renderer.RenderBlankLine();
         renderer.RenderStatus($"Welcome, {authSession.Name ?? authSession.Email}!");
         renderer.RenderBlankLine();
-
         for (var i = 0; i < MenuItems.Length; i++)
             renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
     }
 
-    private void ExecuteSelection()
+    private async Task<bool> ExecuteSelectionAsync(CancellationToken cancellationToken)
     {
         switch (MenuItems[_selectedIndex])
         {
-            case "Quit":
-                logger.LogInformation("User {Email} quit", authSession.Email);
-                break;
+            case "Create Lobby":
+                await navigator.GoToAsync(ScreenName.CreateLobby, cancellationToken);
+                return false;
+            case "Join Lobby":
+                await navigator.GoToAsync(ScreenName.JoinLobby, cancellationToken);
+                return false;
+            case "Logout":
+                logger.LogInformation("User {Email} logged out", authSession.Email);
+                authSession.Clear();
+                lobbySession.Clear();
+                return true;
+            default:
+                return false;
         }
     }
 }

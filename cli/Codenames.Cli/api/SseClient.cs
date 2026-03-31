@@ -14,6 +14,7 @@ public class SseClient(HttpClient http, AuthSession session, ILogger<SseClient> 
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(2);
 
     public event EventHandler<SseEventArgs>? EventReceived;
+    public event EventHandler<bool>? ConnectionStateChanged;
 
     public async Task ConnectAsync(string path, CancellationToken cancellationToken)
     {
@@ -32,9 +33,11 @@ public class SseClient(HttpClient http, AuthSession session, ILogger<SseClient> 
                 logger.LogWarning(exception, "SSE stream disconnected, reconnecting in {Delay}s", ReconnectDelay.TotalSeconds);
             }
 
+            ConnectionStateChanged?.Invoke(this, false);
+
             if (!cancellationToken.IsCancellationRequested)
             {
-                try { 
+                try {
                     await Task.Delay(ReconnectDelay, cancellationToken);
                 }
                 catch (OperationCanceledException) { return; }
@@ -53,6 +56,8 @@ public class SseClient(HttpClient http, AuthSession session, ILogger<SseClient> 
             HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         response.EnsureSuccessStatusCode();
+
+        ConnectionStateChanged?.Invoke(this, true);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);

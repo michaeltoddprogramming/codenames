@@ -1,9 +1,8 @@
 package com.codenames.server.lobby;
 
 import com.codenames.server.lobby.dto.CreateLobbyRequest;
-import com.codenames.server.lobby.dto.CreateLobbyResponse;
 import com.codenames.server.lobby.dto.LobbyStateResponse;
-import com.codenames.server.lobby.dto.StartGameResponse;
+import com.codenames.server.game.dto.StartGameResponse;
 import com.codenames.server.shared.sse.SseBroadcaster;
 import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
@@ -31,11 +30,11 @@ public class LobbyController {
     }
 
     @PostMapping
-    public ResponseEntity<CreateLobbyResponse> createLobby(
+    public ResponseEntity<LobbyStateResponse> createLobby(
             @RequestBody CreateLobbyRequest request,
             @AuthenticationPrincipal User user) {
         Lobby lobby = lobbyService.createLobby(request, user);
-        return ResponseEntity.ok(new CreateLobbyResponse(lobby.lobbyId(), lobby.code()));
+        return ResponseEntity.ok(LobbyStateResponse.from(lobby));
     }
 
     @GetMapping("/{code}")
@@ -52,6 +51,14 @@ public class LobbyController {
         return ResponseEntity.ok(LobbyStateResponse.from(lobby));
     }
 
+    @PostMapping("/{lobbyId}/leave")
+    public ResponseEntity<Void> leaveLobby(
+            @PathVariable String lobbyId,
+            @AuthenticationPrincipal User user) {
+        lobbyService.leaveLobby(lobbyId, user);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{lobbyId}/start")
     public ResponseEntity<StartGameResponse> startGame(
             @PathVariable String lobbyId,
@@ -64,6 +71,7 @@ public class LobbyController {
     public SseEmitter subscribe(
             @PathVariable String lobbyId,
             @AuthenticationPrincipal User user) {
+        lobbyService.ensureParticipant(lobbyId, user.userId());
         SseEmitter emitter = sseEmitterRegistry.register(lobbyId);
         LobbyStateResponse snapshot = lobbyService.getLobbySnapshot(lobbyId);
         try {

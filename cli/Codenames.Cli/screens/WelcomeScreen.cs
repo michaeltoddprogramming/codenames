@@ -12,11 +12,6 @@ public class WelcomeScreen(
 {
     private static readonly string[] MenuItems = ["Login", "Quit"];
 
-    private readonly TerminalRenderer _renderer = renderer;
-    private readonly KeyboardHandler _keyboard = keyboard;
-    private readonly INavigator _navigator = navigator;
-    private readonly ILogger<WelcomeScreen> _logger = logger;
-
     private int _selectedIndex;
 
     public async Task RenderAsync(CancellationToken cancellationToken = default)
@@ -25,7 +20,7 @@ public class WelcomeScreen(
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var key = await _keyboard.ReadKeyAsync(cancellationToken);
+            var key = await keyboard.ReadKeyAsync(cancellationToken);
 
             switch (key.Key)
             {
@@ -40,33 +35,38 @@ public class WelcomeScreen(
                     break;
 
                 case ConsoleKey.Enter:
-                    await ExecuteSelectionAsync(cancellationToken);
-                    return;
+                    var shouldExit = await ExecuteSelectionAsync(cancellationToken);
+                    if (shouldExit)
+                    {
+                        return;
+                    }
+                    Draw();
+                    break;
             }
         }
     }
 
     private void Draw()
     {
-        _renderer.Clear();
-        _renderer.RenderHeader("Codenames");
-        _renderer.RenderBlankLine();
-
+        renderer.Clear();
+        renderer.RenderHeader("Codenames");
+        renderer.RenderBlankLine();
         for (var i = 0; i < MenuItems.Length; i++)
-            _renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
+            renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
     }
 
-    private Task ExecuteSelectionAsync(CancellationToken cancellationToken)
+    private async Task<bool> ExecuteSelectionAsync(CancellationToken cancellationToken)
     {
         switch (MenuItems[_selectedIndex])
         {
             case "Login":
-                return _navigator.GoToAsync(ScreenName.Login, cancellationToken);
+                await navigator.GoToAsync(ScreenName.Login, cancellationToken);
+                return false;
             case "Quit":
-                _logger.LogInformation("User quit");
-                break;
+                logger.LogInformation("User quit");
+                return true;
+            default:
+                return false;
         }
-
-        return Task.CompletedTask;
     }
 }

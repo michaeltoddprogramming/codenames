@@ -4,18 +4,24 @@ namespace Codenames.Cli.Api;
 
 public class LobbyApiClient(ApiClient api)
 {
-    public Task<LobbyResponse> CreateAsync(string name, CancellationToken cancellationToken = default) =>
-        api.PostAsync<LobbyResponse>("/api/lobbies", new { name }, cancellationToken);
+    public Task<LobbyStateResponse> CreateAsync(
+        int playersPerTeam,
+        int matchDurationMinutes,
+        CancellationToken cancellationToken = default) =>
+        api.PostAsync<LobbyStateResponse>(
+            "/api/lobbies",
+            new { playersPerTeam, matchDurationMinutes },
+            cancellationToken);
 
-    public Task<LobbyResponse> JoinAsync(string code, CancellationToken cancellationToken = default) =>
-        api.PostAsync<LobbyResponse>($"/api/lobbies/{code}/join", new { }, cancellationToken);
+    public Task<LobbyStateResponse> GetAsync(string code, CancellationToken cancellationToken = default) =>
+        api.GetAsync<LobbyStateResponse>($"/api/lobbies/{code}", cancellationToken);
 
-    public Task SelectTeamAsync(int lobbyId, string team, CancellationToken cancellationToken = default) =>
-        api.PostAsync($"/api/lobbies/{lobbyId}/team", new { team }, cancellationToken);
+    public Task<LobbyStateResponse> JoinAsync(string code, CancellationToken cancellationToken = default) =>
+        api.PostAsync<LobbyStateResponse>($"/api/lobbies/{code}/join", new { }, cancellationToken);
 
-    public Task SelectRoleAsync(int lobbyId, string role, CancellationToken cancellationToken = default) =>
-        api.PostAsync($"/api/lobbies/{lobbyId}/role", new { role }, cancellationToken);
+    public Task LeaveAsync(string lobbyId, CancellationToken cancellationToken = default) =>
+        api.PostAsync($"/api/lobbies/{lobbyId}/leave", new { }, cancellationToken);
 
-    public Task StartAsync(int lobbyId, CancellationToken cancellationToken = default) =>
-        api.PostAsync($"/api/lobbies/{lobbyId}/start", new { }, cancellationToken);
+    public Task<StartGameResponse> StartAsync(string lobbyId, CancellationToken cancellationToken = default) =>
+        api.PostAsync<StartGameResponse>($"/api/lobbies/{lobbyId}/start", new { }, cancellationToken);
 }

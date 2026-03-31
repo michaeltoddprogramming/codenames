@@ -8,7 +8,7 @@ public class Lobby {
 
     private final String lobbyId;
     private final String code;
-    private final int hostUserId;
+    private volatile int hostUserId;
     private final int playersPerTeam;
     private final int matchDurationMinutes;
     private final ConcurrentHashMap<Integer, LobbyParticipant> participants = new ConcurrentHashMap<>();
@@ -39,7 +39,27 @@ public class Lobby {
         return participants.containsKey(userId);
     }
 
-    public void addParticipant(LobbyParticipant participant) {
+    /**
+     * Atomically adds a participant only if the lobby is not full and they are not already in it.
+     * @return true if the participant was added, false if the lobby is full or they were already present.
+     */
+    public synchronized boolean tryAddParticipant(LobbyParticipant participant, int maxPlayers) {
+        if (participants.size() >= maxPlayers || participants.containsKey(participant.userId())) {
+            return false;
+        }
         participants.put(participant.userId(), participant);
+        return true;
+    }
+
+    public boolean removeParticipant(int userId) {
+        return participants.remove(userId) != null;
+    }
+
+    public boolean isEmpty() {
+        return participants.isEmpty();
+    }
+
+    public void transferHost(int newHostUserId) {
+        this.hostUserId = newHostUserId;
     }
 }

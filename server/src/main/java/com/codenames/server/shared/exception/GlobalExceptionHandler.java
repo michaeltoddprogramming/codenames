@@ -12,7 +12,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(LobbyNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
-    public Map<String, String> handleNotFound(LobbyNotFoundException ex) {
+    public Map<String, String> handleLobbyNotFound(LobbyNotFoundException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
+    @ExceptionHandler(GameNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, String> handleGameNotFound(GameNotFoundException ex) {
         return Map.of("error", ex.getMessage());
     }
 

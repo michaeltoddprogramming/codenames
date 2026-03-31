@@ -1,6 +1,7 @@
 CREATE OR REPLACE PROCEDURE create_game(
-    p_words   JSONB,
-    OUT p_game_id INT
+    p_words                  JSONB,
+    p_match_duration_minutes INT,
+    OUT p_game_id            INT
 )
 LANGUAGE plpgsql
 AS $$
@@ -21,11 +22,12 @@ BEGIN
         SELECT 1 FROM jsonb_array_elements(p_words) AS w
         WHERE w->>'word' IS NULL OR w->>'word_type' IS NULL
     ) THEN
-        RAISE EXCEPTION 'Each entry must have both "word" and "word_type" fields';
+        RAISE EXCEPTION 'Each word entry must have both "word" and "word_type" fields';
     END IF;
 
     SELECT string_agg(DISTINCT w->>'word_type', ', ')
-    INTO v_invalid_types FROM jsonb_array_elements(p_words) AS w
+    INTO v_invalid_types
+    FROM jsonb_array_elements(p_words) AS w
     WHERE NOT EXISTS (
         SELECT 1 FROM word_type wt WHERE wt.type_name = w->>'word_type'
     );
@@ -38,8 +40,13 @@ BEGIN
     FROM game_status
     WHERE game_status = 'active';
 
-    INSERT INTO game (game_status_id)
-    VALUES (v_game_status_id)
+    INSERT INTO game (game_status_id, match_duration_minutes, match_started_at, match_ends_at)
+    VALUES (
+        v_game_status_id,
+        p_match_duration_minutes,
+        NOW(),
+        NOW() + (p_match_duration_minutes || ' minutes')::INTERVAL
+    )
     RETURNING game_id INTO p_game_id;
 
     INSERT INTO game_word (game_id, word_type_id, word)

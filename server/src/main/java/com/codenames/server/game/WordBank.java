@@ -1,54 +1,44 @@
 package com.codenames.server.game;
 
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PostConstruct;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
+@Component
 public class WordBank {
 
-    private static final List<String> WORDS = List.of(
-        "AFRICA", "AGENT", "AIR", "ALIEN", "ALPS", "AMAZON", "ANGEL", "ANTARCTICA",
-        "APPLE", "ARM", "ATLANTIS", "BACK", "BALL", "BAND", "BANK", "BARK",
-        "BAT", "BATTERY", "BEAR", "BED", "BELT", "BERLIN", "BERRY", "BILL",
-        "BLADE", "BLOCK", "BOARD", "BOLT", "BOND", "BOOT", "BOW", "BOX",
-        "BRIDGE", "BRUSH", "BUCK", "BUG", "BUTTON", "CAMP", "CAPITAL", "CAR",
-        "CARD", "CAST", "CAT", "CELL", "CHANGE", "CHARGE", "CHERRY", "CHEST",
-        "CHINA", "CHIP", "CHOCOLATE", "CIRCLE", "CLIFF", "CLOCK", "CLOUD", "CLUB",
-        "COAL", "COAT", "CODE", "COLD", "COLUMN", "COMIC", "COMPOUND", "CONCERT",
-        "CONTRACT", "COOK", "COPPER", "COVER", "CRASH", "CROSS", "CROWN", "CRUSH",
-        "CUT", "CYCLE", "DAM", "DATE", "DECK", "DEGREE", "DIAMOND", "DICE",
-        "DINOSAUR", "DISK", "DOG", "DOLPHIN", "DRAFT", "DRAGON", "DRAIN", "DREAM",
-        "DRESS", "DRILL", "DRIVE", "DROP", "DRUM", "EAGLE", "EARTH", "ECLIPSE",
-        "EGG", "EGYPT", "ELEPHANT", "ENGINE", "EUROPE", "EYE", "FACE", "FALL",
-        "FAN", "FARM", "FILE", "FIRE", "FISH", "FLAG", "FLAME", "FLASH",
-        "FLIGHT", "FLOOD", "FLOOR", "FLOWER", "FLY", "FORCE", "FOREST", "FORK",
-        "FRAME", "FRANCE", "FROG", "FROST", "GAME", "GATE", "GHOST", "GLASS",
-        "GLOVE", "GOLD", "GRASS", "GREECE", "GRID", "GROUND", "GUARD", "GUN",
-        "HAMMER", "HAND", "HAWK", "HEART", "HEDGE", "HERO", "HOOK", "HORN",
-        "HORSE", "ICE", "INDIA", "IRON", "ISLAND", "IVORY", "JAM", "JAW",
-        "JET", "JUNGLE", "KEY", "KING", "KITE", "KNIGHT", "LAMP", "LANCE",
-        "LASER", "LEAD", "LEAF", "LEATHER", "LEMON", "LENS", "LIGHT", "LIME",
-        "LINK", "LION", "LOCK", "LOG", "LOOP", "MAIL", "MAP", "MARBLE",
-        "MARS", "MASK", "MATCH", "MAZE", "MERCURY", "MIRROR", "MISSILE", "MOON",
-        "MOSCOW", "MOSS", "MOUNTAIN", "MOUSE", "MOUTH", "NAIL", "NEEDLE", "NEST",
-        "NET", "NIGHT", "NORTH", "NUT", "OAK", "OCEAN", "OLIVE", "OPERA",
-        "ORANGE", "PALM", "PAPER", "PARIS", "PARROT", "PATCH", "PEAK", "PENGUIN",
-        "PIANO", "PIN", "PIPE", "PLANE", "PLANT", "PLATE", "PLUG", "POLE",
-        "POOL", "PRESS", "PRINCE", "PUMP", "RABBIT", "RACK", "RANGE", "RAVEN",
-        "RAY", "RAZOR", "REACTOR", "RING", "RIVER", "ROAD", "ROBOT", "ROCK",
-        "ROSE", "ROUND", "RULER", "SATELLITE", "SCALE", "SCREEN", "SEAL", "SHADOW",
-        "SHARK", "SHELL", "SHIELD", "SHIP", "SIGNAL", "SILVER", "SKY", "SNAKE",
-        "SNOW", "SOCKET", "SPACE", "SPARK", "SPEED", "SPHERE", "SPIDER", "SPRING",
-        "SQUARE", "STAR", "STEAM", "STEEL", "STICK", "STONE", "STORM", "STREAM",
-        "STRING", "SUN", "SWORD", "TABLE", "TANK", "TAPE", "TEMPLE", "THUNDER",
-        "TIGER", "TIME", "TORCH", "TOWER", "TRACK", "TRAIN", "TRAP", "TREE",
-        "TRIANGLE", "TRUNK", "TUBE", "TUNNEL", "VENUS", "VINE", "VIRUS", "WAVE",
-        "WELL", "WHEEL", "WIND", "WING", "WIRE", "WOLF", "WOOD", "WORM"
-    );
+    private List<String> words = new ArrayList<>();
 
-    public static List<String> selectRandom(int count) {
-        var shuffled = new ArrayList<>(WORDS);
+    @PostConstruct
+    public void init() throws IOException {
+        ClassPathResource resource = new ClassPathResource("words.csv");
+        String content;
+        try (var reader = new BufferedReader(new InputStreamReader(resource.getInputStream()))) {
+            content = reader.lines().collect(Collectors.joining());
+        }
+
+        for (String word : content.split(",")) {
+            String trimmed = word.trim().toUpperCase();
+            if (!trimmed.isEmpty()) {
+                words.add(trimmed);
+            }
+        }
+    }
+
+    public List<String> selectRandom(int count) {
+        if (words == null || words.isEmpty()) {
+            throw new IllegalStateException("WordBank is empty - CSV file may not have loaded");
+        }
+        var shuffled = new ArrayList<>(words);
         Collections.shuffle(shuffled);
-        return shuffled.subList(0, count);
+        return shuffled.subList(0, Math.min(count, shuffled.size()));
     }
 }

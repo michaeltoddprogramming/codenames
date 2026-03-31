@@ -1,5 +1,6 @@
 using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
+using Codenames.Cli.Lobby;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Screens;
 using Codenames.Cli.Tui;
@@ -29,6 +30,7 @@ public static class AppHost
                 services.Configure<AuthConfig>(ctx.Configuration.GetSection(AuthConfig.Section));
                 services.AddSingleton<AuthSession>();
                 services.AddSingleton<AuthService>();
+                services.AddSingleton<LobbySession>();
 
                 // API
                 services.AddHttpClient<ApiClient>((serviceProvider, client) =>
@@ -56,6 +58,9 @@ public static class AppHost
                 services.AddTransient<WelcomeScreen>();
                 services.AddTransient<LoginScreen>();
                 services.AddTransient<MainMenuScreen>();
+                services.AddTransient<CreateLobbyScreen>();
+                services.AddTransient<JoinLobbyScreen>();
+                services.AddTransient<LobbyRoomScreen>();
 
                 // App runner
                 services.AddSingleton<AppRunner>();

@@ -1,8 +1,18 @@
 namespace Codenames.Cli.Models;
 
-public record LobbyResponse(int Id, string Name, string JoinCode, string Status, int HostId,List<ParticipantResponse> Participants);
+public record LobbyParticipantInfo(int UserId, string Username, bool IsHost);
 
-public record ParticipantResponse(int UserId, string Username, string? Team, string? Role);
+public record LobbyStateResponse(
+	string LobbyId,
+	string Code,
+	int HostUserId,
+	int PlayersPerTeam,
+	int MatchDurationMinutes,
+	List<LobbyParticipantInfo> Participants);
+
+public record StartGameResponse(int GameId);
+
+public record GameParticipantIdentityResponse(int GameId, string TeamName, string RoleName);
 
 public record WordCard(string  Word, string  Category, bool Revealed);
 

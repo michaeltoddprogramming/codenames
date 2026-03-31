@@ -5,4 +5,7 @@ public enum ScreenName
     Welcome,
     Login,
     MainMenu,
+    CreateLobby,
+    JoinLobby,
+    LobbyRoom,
 }

@@ -2,44 +2,56 @@ package com.codenames.server.lobby;
 
 import com.codenames.server.game.GameRepository;
 import com.codenames.server.game.WordBank;
+import com.codenames.server.game.dto.GameWord;
 import com.codenames.server.lobby.dto.CreateLobbyRequest;
 import com.codenames.server.lobby.dto.LobbyStateResponse;
 import com.codenames.server.shared.exception.LobbyNotFoundException;
 import com.codenames.server.shared.sse.SseBroadcaster;
+import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class LobbyService {
 
-    private static final Set<Integer> VALID_MATCH_DURATIONS = Set.of(3, 5, 10, 15);
+    private static final Logger logger = LoggerFactory.getLogger(LobbyService.class);
+    private static final Duration LOBBY_MAX_AGE = Duration.ofMinutes(30);
 
     private final LobbyRepository lobbyRepository;
     private final GameRepository gameRepository;
     private final SseBroadcaster sseBroadcaster;
-    private final Random random = new Random();
+    private final SseEmitterRegistry sseEmitterRegistry;
+    private final WordBank wordBank;
 
     public LobbyService(LobbyRepository lobbyRepository,
                         GameRepository gameRepository,
-                        SseBroadcaster sseBroadcaster) {
+                        SseBroadcaster sseBroadcaster,
+                        SseEmitterRegistry sseEmitterRegistry,
+                        WordBank wordBank) {
         this.lobbyRepository = lobbyRepository;
         this.gameRepository = gameRepository;
         this.sseBroadcaster = sseBroadcaster;
+        this.sseEmitterRegistry = sseEmitterRegistry;
+        this.wordBank = wordBank;
     }
 
     public Lobby createLobby(CreateLobbyRequest request, User user) {
+        ensureNotInAnyLobby(user.userId());
         if (request.playersPerTeam() < 2 || request.playersPerTeam() > 5) {
             throw new IllegalArgumentException("Players per team must be between 2 and 5");
         }
-        if (!VALID_MATCH_DURATIONS.contains(request.matchDurationMinutes())) {
-            throw new IllegalArgumentException("Match duration must be 3, 5, 10, or 15 minutes");
+        if (request.matchDurationMinutes() < 1 || request.matchDurationMinutes() > 60) {
+            throw new IllegalArgumentException("Match duration must be between 1 and 60 minutes");
         }
         return lobbyRepository.create(user.userId(), user.username(), user.email(),
                 request.playersPerTeam(), request.matchDurationMinutes());
@@ -56,18 +68,54 @@ public class LobbyService {
     }
 
     public Lobby joinLobby(String code, User user) {
+        ensureNotInAnyLobby(user.userId());
         Lobby lobby = getLobbyByCode(code);
-        if (lobby.hasParticipant(user.userId())) {
-            throw new IllegalStateException("User is already in this lobby");
-        }
         int requiredTotal = lobby.playersPerTeam() * 2;
-        if (lobby.participants().size() >= requiredTotal) {
+        boolean added = lobby.tryAddParticipant(
+                new LobbyParticipant(user.userId(), user.username(), user.email()), requiredTotal);
+        if (!added) {
+            if (lobby.hasParticipant(user.userId())) {
+                throw new IllegalStateException("You are already in this lobby");
+            }
             throw new IllegalStateException("Lobby is full (" + requiredTotal + " players max)");
         }
-        lobby.addParticipant(new LobbyParticipant(user.userId(), user.username(), user.email()));
         sseBroadcaster.broadcast(lobby.lobbyId(), LobbyEventType.PLAYER_JOINED.name(),
                 Map.of("userId", user.userId(), "username", user.username()));
+        sseBroadcaster.broadcast(lobby.lobbyId(), LobbyEventType.LOBBY_SNAPSHOT.name(),
+                LobbyStateResponse.from(lobby));
         return lobby;
+    }
+
+    public void leaveLobby(String lobbyId, User user) {
+        Lobby lobby = getLobbyById(lobbyId);
+        if (!lobby.hasParticipant(user.userId())) {
+            throw new IllegalStateException("You are not in this lobby");
+        }
+
+        lobby.removeParticipant(user.userId());
+
+        if (lobby.isEmpty()) {
+            lobbyRepository.remove(lobbyId);
+            sseEmitterRegistry.removeChannel(lobbyId);
+            return;
+        }
+
+        if (lobby.hostUserId() == user.userId()) {
+            LobbyParticipant newHost = lobby.participants().iterator().next();
+            lobby.transferHost(newHost.userId());
+        }
+
+        sseBroadcaster.broadcast(lobbyId, LobbyEventType.PLAYER_LEFT.name(),
+                Map.of("userId", user.userId(), "username", user.username()));
+        sseBroadcaster.broadcast(lobbyId, LobbyEventType.LOBBY_SNAPSHOT.name(),
+                LobbyStateResponse.from(lobby));
+    }
+
+    public void ensureParticipant(String lobbyId, int userId) {
+        Lobby lobby = getLobbyById(lobbyId);
+        if (!lobby.hasParticipant(userId)) {
+            throw new IllegalStateException("You are not a participant in this lobby");
+        }
     }
 
     public int startGame(String lobbyId, User user) {
@@ -83,19 +131,29 @@ public class LobbyService {
                     lobby.participants().size() + " present)");
         }
 
-        List<String> words = WordBank.selectRandom(25);
-        List<Map<String, String>> wordList = new ArrayList<>();
-        for (int i = 0; i < 10; i++)  wordList.add(Map.of("word", words.get(i),  "word_type", "red"));
-        for (int i = 10; i < 20; i++) wordList.add(Map.of("word", words.get(i),  "word_type", "blue"));
-        for (int i = 20; i < 24; i++) wordList.add(Map.of("word", words.get(i),  "word_type", "neutral"));
-        wordList.add(Map.of("word", words.get(24), "word_type", "assassin"));
+        List<String> words = wordBank.selectRandom(25);
+        List<Map.Entry<String, Integer>> categoryConfig = List.of(
+            Map.entry(GameWord.CATEGORY_RED,      8),
+            Map.entry(GameWord.CATEGORY_BLUE,     8),
+            Map.entry(GameWord.CATEGORY_NEUTRAL,  8),
+            Map.entry(GameWord.CATEGORY_ASSASSIN, 1)
+        );
 
-        int gameId = gameRepository.createGame(wordList);
+        List<Map<String, String>> wordList = new ArrayList<>();
+        int index = 0;
+        for (var entry : categoryConfig) {
+            for (int i = 0; i < entry.getValue(); i++) {
+                wordList.add(Map.of("word", words.get(index++), "word_type", entry.getKey()));
+            }
+        }
+
+        int gameId = gameRepository.createGame(wordList, lobby.matchDurationMinutes());
         List<Map<String, Object>> participants = assignTeamsAndRoles(lobby);
         gameRepository.insertParticipants(gameId, participants);
 
         sseBroadcaster.broadcast(lobbyId, LobbyEventType.GAME_STARTED.name(), Map.of("gameId", gameId));
         lobbyRepository.remove(lobbyId);
+        sseEmitterRegistry.removeChannel(lobbyId);
         return gameId;
     }
 
@@ -103,16 +161,37 @@ public class LobbyService {
         return LobbyStateResponse.from(getLobbyById(lobbyId));
     }
 
+    @Scheduled(fixedDelay = 60_000)
+    public void cleanupExpiredLobbies() {
+        List<String> removed = lobbyRepository.removeExpired(LOBBY_MAX_AGE);
+        for (String lobbyId : removed) {
+            sseEmitterRegistry.removeChannel(lobbyId);
+            logger.info("Removed expired lobby {}", lobbyId);
+        }
+    }
+
+    private void ensureNotInAnyLobby(int userId) {
+        lobbyRepository.findByUserId(userId).ifPresent(existing -> {
+            throw new IllegalStateException(
+                    "You are already in lobby " + existing.code() + ". Leave it before joining or creating another.");
+        });
+    }
+
     private List<Map<String, Object>> assignTeamsAndRoles(Lobby lobby) {
+        if (lobby.participants().size() < 2) {
+            throw new IllegalStateException("Need at least 2 players to start the game.");
+        }
+
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
         List<LobbyParticipant> shuffled = new ArrayList<>(lobby.participants());
-        Collections.shuffle(shuffled, random);
+        Collections.shuffle(shuffled, rng);
 
         int half = shuffled.size() / 2;
         List<LobbyParticipant> redTeam  = new ArrayList<>(shuffled.subList(0, half));
         List<LobbyParticipant> blueTeam = new ArrayList<>(shuffled.subList(half, shuffled.size()));
 
-        int redSpymasterUserId  = redTeam.get(random.nextInt(redTeam.size())).userId();
-        int blueSpymasterUserId = blueTeam.get(random.nextInt(blueTeam.size())).userId();
+        int redSpymasterUserId  = redTeam.get(rng.nextInt(redTeam.size())).userId();
+        int blueSpymasterUserId = blueTeam.get(rng.nextInt(blueTeam.size())).userId();
 
         List<Map<String, Object>> assignments = new ArrayList<>();
         for (LobbyParticipant p : redTeam) {
