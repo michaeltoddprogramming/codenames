@@ -70,11 +70,6 @@ infrastructure:
     - echo "DB_HOST=$(terraform output -raw db_host)" >> ../deploy.env
     - echo "DB_PORT=$(terraform output -raw db_port)" >> ../deploy.env
     - echo "DB_NAME=$(terraform output -raw db_name)" >> ../deploy.env
-    - echo "DB_ADMIN_USER=${TF_VAR_db_admin_user}" >> ../deploy.env
-    - echo "DB_ADMIN_PASSWORD=${TF_VAR_db_admin_password}" >> ../deploy.env
-    - echo "DB_USER=${TF_VAR_db_user}" >> ../deploy.env
-    - echo "DB_USER_PASSWORD=${TF_VAR_db_user_password}" >> ../deploy.env
-    - echo "JWT_SECRET=${TF_VAR_jwt_secret}" >> ../deploy.env
   artifacts:
     reports:
       dotenv: deploy.env
@@ -130,12 +125,34 @@ migrate:
     - |
       flyway \
         -url="jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME" \
-        -user="$DB_ADMIN_USER" \
-        -password="$DB_ADMIN_PASSWORD" \
+        -user="$TF_VAR_db_admin_user" \
+        -password="$TF_VAR_db_admin_password" \
         -locations="filesystem:./flyway/migrations,filesystem:./flyway/data,filesystem:./flyway/programmability" \
-        -placeholders.db_user="$DB_USER" \
-        -placeholders.db_user_password="$DB_USER_PASSWORD" \
+        -placeholders.db_user="$TF_VAR_db_user" \
+        -placeholders.db_user_password="$TF_VAR_db_user_password" \
         migrate
+
+repair_checksums:
+  stage: migrate
+  image:
+    name: redgate/flyway:latest
+    entrypoint: [""]
+  needs:
+    - infrastructure
+    - start_db
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  script:
+    - |
+      flyway \
+        -url="jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME" \
+        -user="$TF_VAR_db_admin_user" \
+        -password="$TF_VAR_db_admin_password" \
+        -locations="filesystem:./flyway/migrations,filesystem:./flyway/data,filesystem:./flyway/programmability" \
+        -placeholders.db_user="$TF_VAR_db_user" \
+        -placeholders.db_user_password="$TF_VAR_db_user_password" \
+        repair
 
 deploy:
   stage: deploy
@@ -157,10 +174,10 @@ deploy:
     - ssh -o StrictHostKeyChecking=no ec2-user@$EC2_PUBLIC_IP "cloud-init status --wait"
     - |
       cat > /tmp/codenames.env <<EOF
-      JWT_SECRET=${JWT_SECRET}
+      JWT_SECRET=${TF_VAR_jwt_secret}
       DB_URL=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
-      DB_USERNAME=${DB_USER}
-      DB_PASSWORD=${DB_USER_PASSWORD}
+      DB_USERNAME=${TF_VAR_db_user}
+      DB_PASSWORD=${TF_VAR_db_user_password}
       EOF
       sed -i 's/^[[:space:]]*//' /tmp/codenames.env
     - scp -o StrictHostKeyChecking=no /tmp/codenames.env ec2-user@$EC2_PUBLIC_IP:/home/ec2-user/codenames.env
