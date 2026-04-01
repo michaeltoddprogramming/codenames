@@ -39,17 +39,21 @@ public class GameResultScreen(
 
     private void RenderResult(GameEndResult result)
     {
+        bool isRed = result.MyTeam.Equals("red", StringComparison.OrdinalIgnoreCase);
+        string teamColor = isRed ? "red" : "blue";
+        string teamName  = isRed ? "RED" : "BLUE";
+
         if (result.Winner is null)
         {
             AnsiConsole.Write(new Markup("[yellow bold]   ══════════  DRAW  ══════════[/]"));
         }
-        else if (result.Winner.Equals("red", StringComparison.OrdinalIgnoreCase))
+        else if (result.Winner.Equals(result.MyTeam, StringComparison.OrdinalIgnoreCase))
         {
-            AnsiConsole.Write(new Markup("[red bold]   ══════════  RED WINS  ══════════[/]"));
+            AnsiConsole.Write(new Markup($"[{teamColor} bold]   ══════════  {teamName} TEAM WON  ══════════[/]"));
         }
         else
         {
-            AnsiConsole.Write(new Markup("[blue bold]   ══════════  BLUE WINS  ══════════[/]"));
+            AnsiConsole.Write(new Markup($"[{teamColor} bold]   ══════════  {teamName} TEAM LOST  ══════════[/]"));
         }
 
         renderer.RenderBlankLine();
