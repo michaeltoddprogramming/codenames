@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
 using Codenames.Cli.Lobby;
@@ -36,14 +34,6 @@ public class CreateLobbyScreen(
             }
 
             lobbySession.SetLobby(lobby, userId.Value);
-
-            renderer.RenderBlankLine();
-            renderer.RenderStatus("Lobby created successfully.");
-            renderer.RenderStatus($"Join Code: {lobby.Code}");
-            renderer.RenderStatus("Share the join code with other players.");
-            renderer.RenderBlankLine();
-            renderer.RenderStatus("Press any key to enter the lobby room...");
-            await keyboard.ReadKeyAsync(cancellationToken);
             await navigator.GoToAsync(ScreenName.LobbyRoom, cancellationToken);
             return;
         }
