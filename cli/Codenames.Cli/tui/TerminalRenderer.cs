@@ -7,6 +7,19 @@ public class TerminalRenderer
 {
     public void Clear() => AnsiConsole.Clear();
 
+    public static void StartFrame()
+    {
+        Console.Write("\x1b[?25l");    // hide cursor
+        Console.Write("\x1b[?2026h");  // begin synchronized output
+        AnsiConsole.Clear();           // Spectre-aware clear — keeps internal cursor state correct
+    }
+
+    public static void EndFrame()
+    {
+        Console.Write("\x1b[?2026l");  // end synchronized output — atomic paint
+        Console.Write("\x1b[?25h");    // show cursor
+    }
+
     public void RenderHeader(string title) =>
         AnsiConsole.Write(new FigletText(title).Color(Color.Blue));
 

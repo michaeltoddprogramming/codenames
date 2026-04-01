@@ -23,7 +23,7 @@ public class BoardScreen(
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
     private const int KeyPollMs = 50;
-    private const int RedrawEveryMs = 500;
+    private const int RedrawEveryMs = 1000;
 
     private readonly GameApiClient _gameApi = gameApi;
     private readonly SseClient _sse = sse;
@@ -45,6 +45,7 @@ public class BoardScreen(
     private string? _statusMessage;
     private bool _snapshotReceived;
     private bool _gameEnded;
+    private bool _dirty;
     private HashSet<string> _myVotedWords = [];
 
     private int _cursorRow;
@@ -97,36 +98,41 @@ public class BoardScreen(
 
         while (!ct.IsCancellationRequested)
         {
-            bool ended, ready;
-            lock (_sync) { ended = _gameEnded; ready = _snapshotReceived; }
-
-            if (ended) return;
-
-            if (!ready)
+            bool ended, ready, dirty;
+            lock (_sync)
             {
-                await Task.Delay(KeyPollMs, ct);
-                continue;
+                ended = _gameEnded;
+                ready = _snapshotReceived;
+                dirty = _dirty;
+                _dirty = false;
             }
 
-            if (redrawBucket == 0)
-                Draw();
+            if (ended) return;
+            if (!ready) { await Task.Delay(KeyPollMs, ct); continue; }
+
+            redrawBucket = DrawIfNeeded(dirty, redrawBucket);
 
             if (Console.KeyAvailable)
             {
                 var key = Console.ReadKey(intercept: true);
                 if (key.Key == ConsoleKey.Escape) return;
-
                 await HandleKeyAsync(key, gameId, ct);
-                redrawBucket = 0;
+                lock (_sync) { _dirty = true; }
             }
             else
             {
                 await Task.Delay(KeyPollMs, ct);
-                redrawBucket += KeyPollMs;
-                if (redrawBucket >= RedrawEveryMs)
-                    redrawBucket = 0;
+                redrawBucket -= KeyPollMs;
+                if (redrawBucket < 0) redrawBucket = 0;
             }
         }
+    }
+
+    private int DrawIfNeeded(bool dirty, int redrawBucket)
+    {
+        if (!dirty && redrawBucket > 0) return redrawBucket;
+        Draw();
+        return RedrawEveryMs;
     }
 
     private async Task HandleKeyAsync(ConsoleKeyInfo key, int gameId, CancellationToken ct)
@@ -268,6 +274,7 @@ public class BoardScreen(
             _cards            = snap.Words.Select(ToWordCard).ToList();
             _snapshotReceived = true;
             _myVotedWords     = [];
+            _dirty            = true;
         }
     }
 
@@ -277,6 +284,7 @@ public class BoardScreen(
         {
             _activeRounds[p.Team] = new ActiveRoundDetailView(0, p.ClueWord, p.ClueNumber, new());
             _statusMessage = $"{p.Team.ToUpper()} clue: {p.ClueWord.ToUpper()} \u00d7 {p.ClueNumber}";
+            _dirty = true;
         }
     }
 
@@ -290,6 +298,7 @@ public class BoardScreen(
                 updatedVotes[p.Word] = updatedVotes.GetValueOrDefault(p.Word) + 1;
                 _activeRounds[p.Team] = round with { Votes = updatedVotes };
             }
+            _dirty = true;
         }
     }
 
@@ -313,6 +322,7 @@ public class BoardScreen(
             if (p.Team.Equals(_myTeam, StringComparison.OrdinalIgnoreCase))
                 _myVotedWords = new HashSet<string>();
             _statusMessage = $"{p.Team.ToUpper()} revealed {p.Words.Count} word(s)";
+            _dirty = true;
         }
     }
 
@@ -326,17 +336,26 @@ public class BoardScreen(
                 _myVotedWords  = new HashSet<string>();
                 _statusMessage = "Waiting for your Spymaster's clue...";
             }
+            _dirty = true;
         }
     }
 
     private void ApplyTurnSkipped(TurnSkippedPayload p)
     {
-        lock (_sync) { _statusMessage = $"{p.Team.ToUpper()} Spymaster timed out \u2014 round skipped"; }
+        lock (_sync)
+        {
+            _statusMessage = $"{p.Team.ToUpper()} Spymaster timed out \u2014 round skipped";
+            _dirty = true;
+        }
     }
 
     private void ApplyTimerTick(TimerTickPayload p)
     {
-        lock (_sync) { _matchEndsAt = DateTimeOffset.UtcNow.AddSeconds(p.SecondsRemaining); }
+        lock (_sync)
+        {
+            _matchEndsAt = DateTimeOffset.UtcNow.AddSeconds(p.SecondsRemaining);
+            _dirty = true;
+        }
     }
 
     private void ApplyGameEnded(GameEndedPayload p)
@@ -347,6 +366,7 @@ public class BoardScreen(
                 ? null : p.Winner;
             _lobbySession.SetGameResult(new GameEndResult(winner, p.Reason, p.RedRemaining, p.BlueRemaining));
             _gameEnded = true;
+            _dirty = true;
         }
     }
 
@@ -375,7 +395,7 @@ public class BoardScreen(
             myVotedWords  = new HashSet<string>(_myVotedWords);
         }
 
-        _renderer.Clear();
+        TerminalRenderer.StartFrame();
         AnsiConsole.Write(new FigletText("Codenames").Color(Color.Blue));
         _renderer.RenderBlankLine();
 
@@ -429,6 +449,8 @@ public class BoardScreen(
             _renderer.RenderBlankLine();
             _renderer.RenderStatus(status);
         }
+
+        TerminalRenderer.EndFrame();
     }
 
     private void RenderCluePanel(Dictionary<string, ActiveRoundDetailView?> rounds, string myTeam)

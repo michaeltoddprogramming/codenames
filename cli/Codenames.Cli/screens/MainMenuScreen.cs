@@ -77,13 +77,14 @@ public class MainMenuScreen(
 
     private void Draw()
     {
-        renderer.Clear();
+        TerminalRenderer.StartFrame();
         renderer.RenderHeader("Codenames");
         renderer.RenderBlankLine();
         renderer.RenderStatus($"Welcome, {authSession.Name ?? authSession.Email}!");
         renderer.RenderBlankLine();
         for (var i = 0; i < _menuItems.Length; i++)
             renderer.RenderMenuItem(_menuItems[i], isSelected: i == _selectedIndex);
+        TerminalRenderer.EndFrame();
     }
 
     private async Task CheckForActiveGameAsync(CancellationToken cancellationToken)
