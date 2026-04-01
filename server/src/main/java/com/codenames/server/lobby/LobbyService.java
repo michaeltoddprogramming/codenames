@@ -1,6 +1,8 @@
 package com.codenames.server.lobby;
 
+import com.codenames.server.game.ClueTimerService;
 import com.codenames.server.game.GameRepository;
+import com.codenames.server.game.MatchTimerService;
 import com.codenames.server.game.WordBank;
 import com.codenames.server.game.dto.GameWord;
 import com.codenames.server.lobby.dto.CreateLobbyRequest;
@@ -32,17 +34,23 @@ public class LobbyService {
     private final SseBroadcaster sseBroadcaster;
     private final SseEmitterRegistry sseEmitterRegistry;
     private final WordBank wordBank;
+    private final ClueTimerService clueTimerService;
+    private final MatchTimerService matchTimerService;
 
     public LobbyService(LobbyRepository lobbyRepository,
                         GameRepository gameRepository,
                         SseBroadcaster sseBroadcaster,
                         SseEmitterRegistry sseEmitterRegistry,
-                        WordBank wordBank) {
+                        WordBank wordBank,
+                        ClueTimerService clueTimerService,
+                        MatchTimerService matchTimerService) {
         this.lobbyRepository = lobbyRepository;
         this.gameRepository = gameRepository;
         this.sseBroadcaster = sseBroadcaster;
         this.sseEmitterRegistry = sseEmitterRegistry;
         this.wordBank = wordBank;
+        this.clueTimerService = clueTimerService;
+        this.matchTimerService = matchTimerService;
     }
 
     public Lobby createLobby(CreateLobbyRequest request, User user) {
@@ -154,6 +162,11 @@ public class LobbyService {
         sseBroadcaster.broadcast(lobbyId, LobbyEventType.GAME_STARTED.name(), Map.of("gameId", gameId));
         lobbyRepository.remove(lobbyId);
         sseEmitterRegistry.removeChannel(lobbyId);
+
+        clueTimerService.start(gameId, "red");
+        clueTimerService.start(gameId, "blue");
+        matchTimerService.start(gameId, lobby.matchDurationMinutes());
+
         return gameId;
     }
 
