@@ -2,6 +2,7 @@ package com.codenames.server.game;
 
 import com.codenames.server.game.dto.ClueRequest;
 import com.codenames.server.game.dto.GameParticipantIdentityResponse;
+import com.codenames.server.game.dto.GamePlayerResponse;
 import com.codenames.server.game.dto.GameStateDetailResponse;
 import com.codenames.server.game.dto.GameStateResponse;
 import com.codenames.server.game.dto.VoteRequest;
@@ -10,6 +11,7 @@ import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,6 +45,13 @@ public class GameController {
     public ResponseEntity<GameStateResponse> getGame(@PathVariable int gameId) {
         Game game = gameService.getGameById(gameId);
         return ResponseEntity.ok(GameStateResponse.from(game));
+    }
+
+    @GetMapping("/{gameId}/players")
+    public ResponseEntity<List<GamePlayerResponse>> getPlayers(
+            @PathVariable int gameId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(gameService.getGamePlayers(gameId, user));
     }
 
     @GetMapping("/{gameId}/me")

@@ -5,6 +5,7 @@ import static com.codenames.server.shared.ExceptionUtils.rootMessage;
 import com.codenames.server.game.dto.ActiveRound;
 import com.codenames.server.game.dto.GameParticipantIdentityResponse;
 import com.codenames.server.game.dto.GameParticipantInfo;
+import com.codenames.server.game.dto.GamePlayerResponse;
 import com.codenames.server.game.dto.GameWord;
 import com.codenames.server.game.dto.RoundResult;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -182,6 +183,18 @@ public class GameRepository {
             },
             gameId,
             userId
+        );
+    }
+
+    public List<GamePlayerResponse> getGamePlayers(int gameId) {
+        return jdbcTemplate.query(
+            "SELECT * FROM get_game_players(?)",
+            (rs, rowNum) -> new GamePlayerResponse(
+                rs.getString("username"),
+                rs.getString("team_name"),
+                rs.getString("role_name")
+            ),
+            gameId
         );
     }
 

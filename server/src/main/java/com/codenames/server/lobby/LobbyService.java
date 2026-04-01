@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -157,6 +158,11 @@ public class LobbyService {
         matchTimerService.start(gameId, matchDurationMinutes);
 
         return gameId;
+    }
+
+    public Optional<LobbyStateResponse> findMyLobby(User user) {
+        return lobbyRepository.findByUserId(user.userId())
+                .map(lobby -> LobbyStateResponse.from(lobby, matchDurationMinutes));
     }
 
     public LobbyStateResponse getLobbySnapshot(String lobbyId) {

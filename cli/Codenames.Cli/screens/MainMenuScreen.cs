@@ -1,5 +1,7 @@
+using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
 using Codenames.Cli.Lobby;
+using Codenames.Cli.Models;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
@@ -9,17 +11,21 @@ namespace Codenames.Cli.Screens;
 public class MainMenuScreen(
     AuthSession authSession,
     LobbySession lobbySession,
+    LobbyApiClient lobbyApiClient,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
     INavigator navigator,
     ILogger<MainMenuScreen> logger) : IScreen
 {
-    private static readonly string[] MenuItems = ["Create Lobby", "Join Lobby", "Logout"];
-
+    private string[] _menuItems = [];
+    private LobbyStateResponse? _existingLobby;
     private int _selectedIndex;
 
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
+        _existingLobby = await TryGetExistingLobbyAsync(cancellationToken);
+        _menuItems = BuildMenuItems();
+        _selectedIndex = 0;
         Draw();
 
         while (!cancellationToken.IsCancellationRequested)
@@ -34,20 +40,28 @@ public class MainMenuScreen(
                     break;
 
                 case ConsoleKey.DownArrow:
-                    _selectedIndex = Math.Min(MenuItems.Length - 1, _selectedIndex + 1);
+                    _selectedIndex = Math.Min(_menuItems.Length - 1, _selectedIndex + 1);
                     Draw();
                     break;
 
                 case ConsoleKey.Enter:
                     var shouldExit = await ExecuteSelectionAsync(cancellationToken);
-                    if (shouldExit)
-                    {
-                        return;
-                    }
+                    if (shouldExit) return;
                     Draw();
                     break;
             }
         }
+    }
+
+    private string[] BuildMenuItems()
+    {
+        var items = new List<string>();
+        if (_existingLobby is not null)
+            items.Add($"Rejoin Lobby ({_existingLobby.Code})");
+        items.Add("Create Lobby");
+        items.Add("Join Lobby");
+        items.Add("Logout");
+        return [.. items];
     }
 
     private void Draw()
@@ -57,13 +71,23 @@ public class MainMenuScreen(
         renderer.RenderBlankLine();
         renderer.RenderStatus($"Welcome, {authSession.Name ?? authSession.Email}!");
         renderer.RenderBlankLine();
-        for (var i = 0; i < MenuItems.Length; i++)
-            renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
+        for (var i = 0; i < _menuItems.Length; i++)
+            renderer.RenderMenuItem(_menuItems[i], isSelected: i == _selectedIndex);
     }
 
     private async Task<bool> ExecuteSelectionAsync(CancellationToken cancellationToken)
     {
-        switch (MenuItems[_selectedIndex])
+        var selected = _menuItems[_selectedIndex];
+
+        if (selected.StartsWith("Rejoin Lobby") && _existingLobby is not null)
+        {
+            if (authSession.UserId is { } userId)
+                lobbySession.SetLobby(_existingLobby, userId);
+            await navigator.GoToAsync(ScreenName.LobbyRoom, cancellationToken);
+            return false;
+        }
+
+        switch (selected)
         {
             case "Create Lobby":
                 await navigator.GoToAsync(ScreenName.CreateLobby, cancellationToken);
@@ -78,6 +102,19 @@ public class MainMenuScreen(
                 return true;
             default:
                 return false;
+        }
+    }
+
+    private async Task<LobbyStateResponse?> TryGetExistingLobbyAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await lobbyApiClient.GetMyLobbyAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Could not check for existing lobby");
+            return null;
         }
     }
 }

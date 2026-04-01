@@ -20,3 +20,5 @@ public record GameStateResponse(int GameId, string Status, List<WordResponse> Wo
 public record WordResponse(int Id, string Word, string? Category, bool Revealed);
 
 public record ClueResponse(string Word, int Number, string TeamName, string SubmittedBy);
+
+public record GamePlayerInfo(string Username, string TeamName, string RoleName);

@@ -28,6 +28,8 @@ public class LobbyRoomScreen(
     private int? _startedGameId;
     private bool _startRequested;
     private bool _connected;
+    private bool _hasConnected;
+    private bool _dirty;
     private int _userId;
     private CancellationTokenSource? _streamCts;
 
@@ -50,6 +52,8 @@ public class LobbyRoomScreen(
         _startRequested = false;
         _startedGameId = null;
         _connected = false;
+        _hasConnected = false;
+        _dirty = true;
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _streamCts = linkedCts;
@@ -84,20 +88,23 @@ public class LobbyRoomScreen(
 
     private async Task<LobbyExitReason> RunLobbyLoopAsync(CancellationToken cancellationToken)
     {
-        renderer.Clear();
         while (!cancellationToken.IsCancellationRequested)
         {
             LobbyStateResponse currentLobby;
             bool connected;
+            bool dirty;
             lock (_sync)
             {
                 if (_startedGameId.HasValue)
                     return LobbyExitReason.GameStarted;
                 currentLobby = _lobby!;
                 connected = _connected;
+                dirty = _dirty;
+                _dirty = false;
             }
 
-            DrawLobby(currentLobby, lobbySession.IsHost, connected);
+            if (dirty)
+                DrawLobby(currentLobby, lobbySession.IsHost, connected);
 
             if (lobbySession.IsHost && !_startRequested)
             {
@@ -118,31 +125,34 @@ public class LobbyRoomScreen(
     private async Task<LobbyExitReason> PromptAndStartGameAsync(
         LobbyStateResponse currentLobby, CancellationToken cancellationToken)
     {
-        renderer.RenderBlankLine();
-        renderer.RenderStatus("Press Enter to start the game when ready (Esc to leave)...");
-
         while (!cancellationToken.IsCancellationRequested)
         {
             LobbyStateResponse latestLobby;
             bool connected;
+            bool dirty;
             lock (_sync)
             {
                 if (_startedGameId.HasValue)
                     return LobbyExitReason.GameStarted;
                 latestLobby = _lobby ?? currentLobby;
                 connected = _connected;
+                dirty = _dirty;
+                _dirty = false;
             }
 
-            DrawLobby(latestLobby, lobbySession.IsHost, connected);
-            renderer.RenderBlankLine();
-            renderer.RenderStatus("Press Enter to start the game when ready (Esc to leave)...");
+            if (dirty)
+            {
+                DrawLobby(latestLobby, lobbySession.IsHost, connected);
+                renderer.RenderBlankLine();
+                renderer.RenderStatus("Press Enter to start the game when ready (Esc to leave)...");
+            }
 
             if (Console.KeyAvailable)
             {
                 var key = Console.ReadKey(intercept: true);
                 if (key.Key == ConsoleKey.Enter)
                     break;
-                if (key.Key == ConsoleKey.Escape)
+                else if (key.Key == ConsoleKey.Escape)
                     return LobbyExitReason.UserLeft;
             }
 
@@ -231,7 +241,12 @@ public class LobbyRoomScreen(
 
     private void OnConnectionStateChanged(object? sender, bool connected)
     {
-        lock (_sync) { _connected = connected; }
+        lock (_sync)
+        {
+            _connected = connected;
+            if (connected) _hasConnected = true;
+            _dirty = true;
+        }
     }
 
     private void HandleLobbySnapshot(string data)
@@ -243,6 +258,7 @@ public class LobbyRoomScreen(
             lock (_sync)
             {
                 _lobby = snapshot;
+                _dirty = true;
                 lobbySession.SetLobby(snapshot, _userId);
             }
         }
@@ -277,22 +293,35 @@ public class LobbyRoomScreen(
 
         try
         {
-            var identity = await gameApiClient.GetMyIdentityAsync(gameId, cancellationToken);
-            renderer.RenderStatus($"Game ID: {identity.GameId}");
-            renderer.RenderStatus($"Team: {identity.TeamName}");
-            renderer.RenderStatus($"Role: {identity.RoleName}");
-            
+            var players = await gameApiClient.GetPlayersAsync(gameId, cancellationToken);
             lobbySession.SetGameId(gameId);
+
+            var byTeam = players
+                .GroupBy(p => p.TeamName, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g.Key);
+
+            foreach (var team in byTeam)
+            {
+                AnsiConsole.Write(new Rule($"[bold]{team.Key} Team[/]").RuleStyle("grey"));
+                foreach (var player in team.OrderBy(p => p.RoleName))
+                {
+                    var spymasterTag = player.RoleName.Equals("spymaster", StringComparison.OrdinalIgnoreCase)
+                        ? " [yellow](Spymaster)[/]"
+                        : "";
+                    AnsiConsole.MarkupLine($"  {player.Username}{spymasterTag}");
+                }
+                renderer.RenderBlankLine();
+            }
         }
         catch (Exception ex)
         {
-            renderer.RenderError($"Game started, but failed to load your team/role: {ex.Message}");
+            renderer.RenderError($"Game started, but failed to load participants: {ex.Message}");
+            renderer.RenderBlankLine();
         }
 
-        renderer.RenderBlankLine();
         renderer.RenderStatus("Press any key to continue...");
         await keyboard.ReadKeyAsync(cancellationToken);
-        
+
         await navigator.GoToAsync(ScreenName.Board, cancellationToken);
     }
 
@@ -318,7 +347,7 @@ public class LobbyRoomScreen(
             ? "You are the host. Press Enter to start when ready."
             : "Waiting for host to start.");
 
-        if (!connected)
+        if (_hasConnected && !connected)
             renderer.RenderError("Connection lost - reconnecting...");
 
         renderer.RenderBlankLine();

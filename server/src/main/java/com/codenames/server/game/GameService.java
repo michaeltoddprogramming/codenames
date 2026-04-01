@@ -3,6 +3,7 @@ package com.codenames.server.game;
 import com.codenames.server.game.dto.ActiveRound;
 import com.codenames.server.game.dto.ClueRequest;
 import com.codenames.server.game.dto.GameParticipantInfo;
+import com.codenames.server.game.dto.GamePlayerResponse;
 import com.codenames.server.game.dto.GameStateDetailResponse;
 import com.codenames.server.game.dto.GameStateDetailResponse.ActiveRoundView;
 import com.codenames.server.game.dto.GameStateDetailResponse.WordView;
@@ -151,6 +152,11 @@ public class GameService {
 
     public Optional<Integer> getMyActiveGame(int userId) {
         return gameRepository.findActiveGameForUser(userId);
+    }
+
+    public List<GamePlayerResponse> getGamePlayers(int gameId, User user) {
+        requireParticipant(gameId, user.userId());
+        return gameRepository.getGamePlayers(gameId);
     }
 
     private GameParticipantInfo requireParticipant(int gameId, int userId) {

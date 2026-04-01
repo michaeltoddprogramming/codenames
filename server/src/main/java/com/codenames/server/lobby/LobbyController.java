@@ -35,6 +35,13 @@ public class LobbyController {
         return ResponseEntity.ok(lobbyService.getLobbySnapshot(lobby.lobbyId()));
     }
 
+    @GetMapping("/me")
+    public ResponseEntity<LobbyStateResponse> getMyLobby(@AuthenticationPrincipal User user) {
+        return lobbyService.findMyLobby(user)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/{code}")
     public ResponseEntity<LobbyStateResponse> getLobby(@PathVariable String code) {
         Lobby lobby = lobbyService.getLobbyByCode(code);

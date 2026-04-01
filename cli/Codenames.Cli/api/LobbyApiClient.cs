@@ -1,9 +1,22 @@
 using Codenames.Cli.Models;
+using System.Net;
 
 namespace Codenames.Cli.Api;
 
 public class LobbyApiClient(ApiClient api)
 {
+    public async Task<LobbyStateResponse?> GetMyLobbyAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await api.GetAsync<LobbyStateResponse>("/api/lobbies/me", cancellationToken);
+        }
+        catch (ApiException ex) when (ex.Status == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
     public Task<LobbyStateResponse> CreateAsync(CancellationToken cancellationToken = default) =>
         api.PostAsync<LobbyStateResponse>(
             "/api/lobbies",

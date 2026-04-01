@@ -4,6 +4,9 @@ namespace Codenames.Cli.Api;
 
 public class GameApiClient(ApiClient api)
 {
+    public Task<List<GamePlayerInfo>> GetPlayersAsync(int gameId, CancellationToken cancellationToken = default) =>
+        api.GetAsync<List<GamePlayerInfo>>($"/api/games/{gameId}/players", cancellationToken);
+
     public Task<GameParticipantIdentityResponse> GetMyIdentityAsync(int gameId, CancellationToken cancellationToken = default) =>
         api.GetAsync<GameParticipantIdentityResponse>($"/api/games/{gameId}/me", cancellationToken);
 
