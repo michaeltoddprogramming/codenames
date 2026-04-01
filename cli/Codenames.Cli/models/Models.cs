@@ -8,7 +8,6 @@ public record LobbyStateResponse(
     string LobbyId,
     string Code,
     int HostUserId,
-    int PlayersPerTeam,
     int MatchDurationMinutes,
     List<LobbyParticipantInfo> Participants);
 

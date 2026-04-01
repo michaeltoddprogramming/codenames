@@ -94,7 +94,7 @@ public class LobbyRoomScreen(
 
             DrawLobby(currentLobby, lobbySession.IsHost, connected);
 
-            if (lobbySession.IsHost && IsLobbyFull(currentLobby) && !_startRequested)
+            if (lobbySession.IsHost && !_startRequested)
             {
                 var hostResult = await PromptAndStartGameAsync(currentLobby, cancellationToken);
                 if (hostResult == LobbyExitReason.GameStarted)
@@ -114,7 +114,7 @@ public class LobbyRoomScreen(
         LobbyStateResponse currentLobby, CancellationToken cancellationToken)
     {
         renderer.RenderBlankLine();
-        renderer.RenderStatus("Lobby is full! Press Enter to start the game (Esc to leave)...");
+        renderer.RenderStatus("Press Enter to start the game when ready (Esc to leave)...");
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -140,6 +140,12 @@ public class LobbyRoomScreen(
         {
             if (_startedGameId.HasValue)
                 return LobbyExitReason.GameStarted;
+        }
+
+        if (currentLobby.Participants.Count < 4)
+        {
+            renderer.RenderError("At least 4 players are required to start the game.");
+            return LobbyExitReason.Continue;
         }
 
         _startRequested = true;
@@ -281,19 +287,17 @@ public class LobbyRoomScreen(
         await keyboard.ReadKeyAsync(cancellationToken);
     }
 
-    private static bool IsLobbyFull(LobbyStateResponse lobby) =>
-        lobby.Participants.Count >= lobby.PlayersPerTeam * 2;
-
     private void DrawLobby(LobbyStateResponse lobby, bool isHost, bool connected)
     {
         renderer.Clear();
         renderer.RenderHeader("Lobby Room");
         renderer.RenderBlankLine();
         renderer.RenderStatus($"Join Code: {lobby.Code}");
-        renderer.RenderStatus($"Players per team: {lobby.PlayersPerTeam}");
         renderer.RenderStatus($"Match duration: {lobby.MatchDurationMinutes} minutes");
-        renderer.RenderStatus($"Players: {lobby.Participants.Count}/{lobby.PlayersPerTeam * 2}");
-        renderer.RenderStatus(isHost ? "You are the host." : "Waiting for host to start.");
+        renderer.RenderStatus($"Players in lobby: {lobby.Participants.Count}");
+        renderer.RenderStatus(isHost
+            ? "You are the host. Press Enter to start when ready."
+            : "Waiting for host to start.");
 
         if (!connected)
             renderer.RenderError("Connection lost - reconnecting...");

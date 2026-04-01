@@ -4,13 +4,10 @@ namespace Codenames.Cli.Api;
 
 public class LobbyApiClient(ApiClient api)
 {
-    public Task<LobbyStateResponse> CreateAsync(
-        int playersPerTeam,
-        int matchDurationMinutes,
-        CancellationToken cancellationToken = default) =>
+    public Task<LobbyStateResponse> CreateAsync(CancellationToken cancellationToken = default) =>
         api.PostAsync<LobbyStateResponse>(
             "/api/lobbies",
-            new { playersPerTeam, matchDurationMinutes },
+            new { },
             cancellationToken);
 
     public Task<LobbyStateResponse> GetAsync(string code, CancellationToken cancellationToken = default) =>

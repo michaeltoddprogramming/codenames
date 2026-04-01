@@ -3,7 +3,6 @@ using Codenames.Cli.Auth;
 using Codenames.Cli.Lobby;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
-using Spectre.Console;
 
 namespace Codenames.Cli.Screens;
 
@@ -21,22 +20,12 @@ public class CreateLobbyScreen(
         renderer.RenderHeader("Create Lobby");
         renderer.RenderBlankLine();
 
-        var playersPerTeam = AnsiConsole.Prompt(
-            new SelectionPrompt<int>()
-                .Title("Select [green]players per team[/]:")
-                .AddChoices(2, 3, 4, 5));
-
-        var matchDuration = AnsiConsole.Prompt(
-            new SelectionPrompt<int>()
-                .Title("Select [green]match duration (minutes)[/]:")
-                .AddChoices(3, 5, 10, 15));
-
         renderer.RenderBlankLine();
         renderer.RenderStatus("Creating lobby...");
 
         try
         {
-            var lobby = await lobbyApiClient.CreateAsync(playersPerTeam, matchDuration, cancellationToken);
+            var lobby = await lobbyApiClient.CreateAsync(cancellationToken);
 
             var userId = authSession.UserId;
             if (userId is null)
