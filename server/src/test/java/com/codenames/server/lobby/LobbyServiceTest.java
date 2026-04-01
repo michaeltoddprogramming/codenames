@@ -4,6 +4,7 @@ import com.codenames.server.game.ClueTimerService;
 import com.codenames.server.game.GameRepository;
 import com.codenames.server.game.MatchTimerService;
 import com.codenames.server.game.WordBank;
+import com.codenames.server.lobby.dto.CreateLobbyRequest;
 import com.codenames.server.shared.sse.SseBroadcaster;
 import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
@@ -45,14 +46,6 @@ class LobbyServiceTest {
 
     @BeforeEach
     void setUp() {
-        lobbyRepository = mock(LobbyRepository.class);
-        gameRepository = mock(GameRepository.class);
-        sseBroadcaster = mock(SseBroadcaster.class);
-        sseEmitterRegistry = mock(SseEmitterRegistry.class);
-        wordBank = mock(WordBank.class);
-        clueTimerService = mock(ClueTimerService.class);
-        matchTimerService = mock(MatchTimerService.class);
-
         service = new LobbyService(
                 lobbyRepository,
                 gameRepository,
@@ -88,8 +81,8 @@ class LobbyServiceTest {
         @Test
         @DisplayName("rejects creating lobby when user is already in one")
         void rejectsWhenUserAlreadyInLobby() {
-            User user = new User(1, "host@test.com", "host");
             Lobby existing = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
+            User user = new User(1, "host@test.com", "host");
             when(lobbyRepository.findByUserId(user.userId())).thenReturn(Optional.of(existing));
 
             assertThatThrownBy(() -> service.createLobby(new CreateLobbyRequest(2, 10), user))
