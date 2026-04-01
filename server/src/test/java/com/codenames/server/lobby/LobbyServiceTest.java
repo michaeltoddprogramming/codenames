@@ -49,20 +49,14 @@ class LobbyServiceTest {
     @BeforeEach
     void setUp() {
         service = new LobbyService(
-                
             lobbyRepository,
-               
             gameRepository,
-               
             sseBroadcaster,
-               
             sseEmitterRegistry,
-               
             wordBank,
-                clueTimerService,
-                matchTimerService
-        ,
-            MATCH_DURATION_MINUTES
+            MATCH_DURATION_MINUTES,
+            clueTimerService,
+            matchTimerService
         );
     }
 
@@ -87,7 +81,7 @@ class LobbyServiceTest {
         @Test
         @DisplayName("rejects creating lobby when user is already in one")
         void rejectsWhenUserAlreadyInLobby() {
-            Lobby existing = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
+            Lobby existing = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
             User user = new User(1, "host@test.com", "host");
             when(lobbyRepository.findByUserId(user.userId())).thenReturn(Optional.of(existing));
 

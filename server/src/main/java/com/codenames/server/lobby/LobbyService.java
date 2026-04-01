@@ -154,7 +154,7 @@ public class LobbyService {
 
         clueTimerService.start(gameId, "red");
         clueTimerService.start(gameId, "blue");
-        matchTimerService.start(gameId, lobby.matchDurationMinutes());
+        matchTimerService.start(gameId, matchDurationMinutes);
 
         return gameId;
     }
