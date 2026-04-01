@@ -47,6 +47,7 @@ public record GameEndResult(
     string? Winner,
     string Reason,
     int RedRemaining,
-    int BlueRemaining);
+    int BlueRemaining,
+    string MyTeam);
 
 public record GamePlayerInfo(string Username, string TeamName, string RoleName);

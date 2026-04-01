@@ -457,7 +457,7 @@ public class BoardScreen(
         {
             var winner = p.Winner?.Equals("draw", StringComparison.OrdinalIgnoreCase) == true
                 ? null : p.Winner;
-            _lobbySession.SetGameResult(new GameEndResult(winner, p.Reason, p.RedRemaining, p.BlueRemaining));
+            _lobbySession.SetGameResult(new GameEndResult(winner, p.Reason, p.RedRemaining, p.BlueRemaining, _myTeam));
             _gameEnded = true;
             _dirty = true;
         }

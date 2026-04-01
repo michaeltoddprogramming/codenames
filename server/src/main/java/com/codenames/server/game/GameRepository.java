@@ -262,9 +262,9 @@ public class GameRepository {
         }
     }
 
-    public void insertVote(int roundId, String word, String username) {
+    public void insertVote(int roundId, String word, int userId) {
         try {
-            jdbcTemplate.update("CALL insert_round_vote(?, ?, ?)", roundId, word, username);
+            jdbcTemplate.update("CALL insert_round_vote(?, ?, ?)", roundId, word, userId);
         } catch (Exception e) {
             String msg = rootMessage(e);
             if (msg.contains("has already voted for")

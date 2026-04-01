@@ -88,7 +88,7 @@ public class GameService {
         ActiveRound activeRound = gameRepository.findActiveRound(gameId, team)
             .orElseThrow(() -> new IllegalStateException("No active round for team " + team + " in game " + gameId));
 
-        gameRepository.insertVote(activeRound.roundId(), request.word().trim(), user.username());
+        gameRepository.insertVote(activeRound.roundId(), request.word().trim(), user.userId());
 
         sseBroadcaster.broadcast(
             "game-" + gameId,

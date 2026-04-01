@@ -135,6 +135,7 @@ public class MainMenuScreen(
                 logger.LogInformation("User {Email} logged out", authSession.Email);
                 authSession.Clear();
                 lobbySession.Clear();
+                await navigator.GoToAsync(ScreenName.Welcome, cancellationToken);
                 return true;
             default:
                 return false;
