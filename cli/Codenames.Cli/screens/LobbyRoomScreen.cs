@@ -2,6 +2,7 @@ using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
 using Codenames.Cli.Lobby;
 using Codenames.Cli.Models;
+using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
@@ -17,6 +18,7 @@ public class LobbyRoomScreen(
     SseClient sseClient,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
+    INavigator navigator,
     ILogger<LobbyRoomScreen> logger) : IScreen
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -279,6 +281,8 @@ public class LobbyRoomScreen(
             renderer.RenderStatus($"Game ID: {identity.GameId}");
             renderer.RenderStatus($"Team: {identity.TeamName}");
             renderer.RenderStatus($"Role: {identity.RoleName}");
+            
+            lobbySession.SetGameId(gameId);
         }
         catch (Exception ex)
         {
@@ -288,6 +292,8 @@ public class LobbyRoomScreen(
         renderer.RenderBlankLine();
         renderer.RenderStatus("Press any key to continue...");
         await keyboard.ReadKeyAsync(cancellationToken);
+        
+        await navigator.GoToAsync(ScreenName.Board, cancellationToken);
     }
 
     private async Task ShowErrorAndWaitAsync(string message, CancellationToken cancellationToken)

@@ -5,35 +5,57 @@ using Codenames.Cli.Models;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
+using Spectre.Console;
 
 namespace Codenames.Cli.Screens;
 
-public class BoardScreen(
-    GameApiClient gameApiClient,
-    TerminalRenderer renderer,
-    INavigator navigator,
-    LobbySession lobbySession,
-    ILogger<BoardScreen> logger) : IScreen
+// Returned by Board.Run() to tell BoardScreen what the user did
+public enum BoardAction { None, Escape, GiveClue, CardSelected }
+public record BoardResult(BoardAction Action, WordCard? SelectedCard = null);
+
+public class BoardScreen : IScreen
 {
+    private readonly GameApiClient _gameApiClient;
+    private readonly TerminalRenderer _renderer;
+    private readonly INavigator _navigator;
+    private readonly LobbySession _lobbySession;
+    private readonly ILogger<BoardScreen> _logger;
+    private readonly ClueManager _clueManager;
+
+    public BoardScreen(
+        GameApiClient gameApiClient,
+        TerminalRenderer renderer,
+        INavigator navigator,
+        LobbySession lobbySession,
+        ILogger<BoardScreen> logger)
+    {
+        _gameApiClient = gameApiClient;
+        _renderer = renderer;
+        _navigator = navigator;
+        _lobbySession = lobbySession;
+        _logger = logger;
+        _clueManager = new ClueManager(gameApiClient, renderer);
+    }
+
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
-        renderer.Clear();
+        _renderer.Clear();
 
         try
         {
-            if (lobbySession.CurrentGameId is not { } gameId)
+            if (_lobbySession.CurrentGameId is not { } gameId)
             {
-                renderer.RenderError("No active game found.");
-                renderer.RenderStatus("Press any key to return...");
+                _renderer.RenderError("No active game found.");
+                _renderer.RenderStatus("Press any key to return...");
                 Console.ReadKey(intercept: true);
-                await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
+                await _navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
                 return;
             }
 
-            renderer.RenderStatus($"Fetching game state for game {gameId}...");
+            _renderer.RenderStatus($"Fetching game state for game {gameId}...");
 
-            var gameStateTask = gameApiClient.GetStateAsync(gameId, cancellationToken);
-            var identityTask = gameApiClient.GetMyIdentityAsync(gameId, cancellationToken);
+            var gameStateTask = _gameApiClient.GetStateAsync(gameId, cancellationToken);
+            var identityTask = _gameApiClient.GetMyIdentityAsync(gameId, cancellationToken);
             await Task.WhenAll(gameStateTask, identityTask);
 
             var gameState = gameStateTask.Result;
@@ -41,15 +63,16 @@ public class BoardScreen(
 
             if (gameState.Words == null || gameState.Words.Count == 0)
             {
-                renderer.RenderError("No board found. Please create a game first.");
-                renderer.RenderBlankLine();
-                renderer.RenderStatus("Press any key to return...");
+                _renderer.RenderError("No board found. Please create a game first.");
+                _renderer.RenderBlankLine();
+                _renderer.RenderStatus("Press any key to return...");
                 Console.ReadKey(intercept: true);
-                await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
+                await _navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
                 return;
             }
 
             var cards = gameState.Words.Select(w => new WordCard(
+                w.Id,
                 w.Word,
                 w.Category is not null
                     ? Enum.Parse<WordCategory>(w.Category, ignoreCase: true)
@@ -59,26 +82,91 @@ public class BoardScreen(
 
             var role = identity.RoleName;
             var isSpymaster = role?.Equals("SPYMASTER", StringComparison.OrdinalIgnoreCase) ?? false;
-            renderer.RenderStatus($"Your role: {role ?? "unknown"} (Team: {identity.TeamName})");
+            var teamName = identity.TeamName ?? "unknown";
 
-            var selectedCard = new Board(cards, renderer, showColors: isSpymaster).Run();
+            await RunBoardLoopAsync(
+                gameId, cards,
+                gameState.Clues,
+                gameState.CurrentClueWord,
+                gameState.CurrentClueNumber,
+                isSpymaster, teamName, role,
+                cancellationToken);
 
-            if (selectedCard != null)
-                renderer.RenderStatus($"You selected: {selectedCard.Word}");
-
-            renderer.RenderStatus("Press any key to continue...");
-            Console.ReadKey(intercept: true);
-            await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
+            await _navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to load board");
-            renderer.RenderBlankLine();
-            renderer.RenderError($"Failed to load board: {ex.Message}");
-            renderer.RenderBlankLine();
-            renderer.RenderStatus("Press any key to return...");
+            _logger.LogError(ex, "Failed to load board");
+            _renderer.RenderBlankLine();
+            _renderer.RenderError($"Failed to load board: {ex.Message}");
+            _renderer.RenderBlankLine();
+            _renderer.RenderStatus("Press any key to return...");
             Console.ReadKey(intercept: true);
-            await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
+            await _navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
+        }
+    }
+
+    private async Task RunBoardLoopAsync(
+        int gameId,
+        List<WordCard> cards,
+        List<ClueResponse>? clues,
+        string? currentClueWord,
+        int? currentClueNumber,
+        bool isSpymaster,
+        string teamName,
+        string? role,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            _renderer.Clear();
+            AnsiConsole.Write(new FigletText("Codenames").Color(Color.Blue));
+            _renderer.RenderBlankLine();
+            AnsiConsole.Write(new Markup($"[yellow]Your role:[/] {role ?? "unknown"} ([bold]{teamName}[/] team)"));
+            _renderer.RenderBlankLine();
+
+            if (isSpymaster)
+                AnsiConsole.Write(new Markup("[yellow]Spymaster mode - press C to give clue, Esc to exit[/]"));
+            else
+                AnsiConsole.Write(new Markup("[yellow]Operative mode - arrows to select, Enter to vote, Esc to exit[/]"));
+
+            _renderer.RenderBlankLine();
+            AnsiConsole.Write(new Markup(
+                "Key: [red]Red[/] = Red team  [blue]Blue[/] = Blue team  " +
+                "[sandybrown]Brown[/] = Neutral  [white]White[/] = Assassin  [grey]Grey[/] = Unrevealed"));
+            _renderer.RenderBlankLine();
+
+            _clueManager.RenderClueHistory(clues);
+
+            var board = new Board(cards, _renderer, showColors: isSpymaster, currentClueWord, currentClueNumber);
+            var result = board.Run();
+
+            switch (result.Action)
+            {
+                case BoardAction.Escape:
+                    return;
+
+                case BoardAction.GiveClue when isSpymaster:
+                    await _clueManager.SubmitClueAsync(gameId, cancellationToken);
+                    break;
+
+                case BoardAction.CardSelected when !isSpymaster && result.SelectedCard != null:
+                    try
+                    {
+                        await _gameApiClient.SubmitVoteAsync(gameId, result.SelectedCard.Id, cancellationToken);
+                        _renderer.RenderStatus($"Voted for: {result.SelectedCard.Word}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to submit vote");
+                        _renderer.RenderError($"Failed to vote: {ex.Message}");
+                    }
+                    _renderer.RenderStatus("Press any key to continue...");
+                    Console.ReadKey(intercept: true);
+                    break;
+            }
+
+            await Task.Delay(100, cancellationToken);
         }
     }
 }

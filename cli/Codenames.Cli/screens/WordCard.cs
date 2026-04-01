@@ -5,7 +5,7 @@ using Spectre.Console;
 
 namespace Codenames.Cli.Screens;
 
-public record WordCard(string Word, WordCategory Category, bool Revealed)
+public record WordCard(int Id, string Word, WordCategory Category, bool Revealed)
 {
     public Color GetDisplayColor(bool showColors) =>
         (showColors || Revealed) ? Category switch

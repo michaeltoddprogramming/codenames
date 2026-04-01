@@ -15,6 +15,8 @@ public record StartGameResponse(int GameId);
 
 public record GameParticipantIdentityResponse(int GameId, string TeamName, string RoleName);
 
-public record GameStateResponse(int GameId, string Status, List<WordResponse> Words);
+public record GameStateResponse(int GameId, string Status, List<WordResponse> Words, List<ClueResponse>? Clues = null, string? CurrentClueWord = null, int? CurrentClueNumber = null);
 
-public record WordResponse(string Word, string? Category, bool Revealed);
+public record WordResponse(int Id, string Word, string? Category, bool Revealed);
+
+public record ClueResponse(string Word, int Number, string TeamName, string SubmittedBy);

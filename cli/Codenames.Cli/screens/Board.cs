@@ -33,15 +33,18 @@ public class Board
             _grid[i / Size, i % Size] = cards[i];
     }
 
-    public WordCard? Run()
+    public BoardResult Run()
     {
-        WordCard? selectedCardVote = null;
         Console.CursorVisible = false;
+      
+        int boardTop = Console.CursorTop;
 
         while (true)
         {
-            RenderHeader();
+            Console.SetCursorPosition(0, boardTop);
+
             _renderer.RenderBoard(_grid, _cursorRow, _cursorCol, _showColors);
+
             if (!_showColors)
                 _renderer.RenderHighlightedWord(SelectedCard);
 
@@ -49,11 +52,15 @@ public class Board
 
             if (_showColors)
             {
-                // Spymaster view — read-only, only Escape exits
-                if (key.Key == ConsoleKey.Escape)
+                switch (key.Key)
                 {
-                    Console.CursorVisible = true;
-                    return null;
+                    case ConsoleKey.C:
+                        Console.CursorVisible = true;
+                        return new BoardResult(BoardAction.GiveClue);
+
+                    case ConsoleKey.Escape:
+                        Console.CursorVisible = true;
+                        return new BoardResult(BoardAction.Escape);
                 }
             }
             else
@@ -76,45 +83,13 @@ public class Board
                         var card = _grid[_cursorRow, _cursorCol];
                         var revealedCard = card with { Revealed = true };
                         _grid[_cursorRow, _cursorCol] = revealedCard;
-                        selectedCardVote = revealedCard;
-                        AnsiConsole.Write(new Markup($"[green]  Selected: {revealedCard.Word}[/]\n"));
-                        break;
+                        Console.CursorVisible = true;
+                        return new BoardResult(BoardAction.CardSelected, revealedCard);
                     case ConsoleKey.Escape:
                         Console.CursorVisible = true;
-                        return selectedCardVote;
+                        return new BoardResult(BoardAction.Escape);
                 }
             }
         }
-    }
-
-    private void RenderHeader()
-    {
-        _renderer.Clear();
-        
-        RenderHeaderNoClear();
-    }
-
-    private void RenderHeaderNoClear()
-    {
-        // Title
-        AnsiConsole.Write(new FigletText("Board").Color(Color.Blue));
-        AnsiConsole.WriteLine();
-
-        // Clue
-        if (!string.IsNullOrEmpty(_clueWord) && _clueNumber.HasValue)
-        {
-            AnsiConsole.Write(new Markup($"[yellow]Clue:[/] [bold]{_clueWord}[/] ({_clueNumber})[/]"));
-        }
-        else
-        {
-            AnsiConsole.Write(new Markup("[yellow]Clue:[/] [dim]No clue yet[/]"));
-        }
-        AnsiConsole.WriteLine();
-        AnsiConsole.WriteLine();
-
-        // Color key legend
-        AnsiConsole.Write(new Markup("Key: \n[red]Red[/] = Red team words  \n[blue]Blue[/] = Blue team words  \n[sandybrown]Brown[/] = Neutral words  \n[white]White[/] = Assassin word  \n[grey]Grey[/] = Unrevealed words"));
-        AnsiConsole.WriteLine();
-        AnsiConsole.WriteLine();
     }
 }

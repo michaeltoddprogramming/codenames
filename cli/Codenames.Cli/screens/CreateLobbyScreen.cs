@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Codenames.Cli.Api;
 using Codenames.Cli.Auth;
 using Codenames.Cli.Lobby;
