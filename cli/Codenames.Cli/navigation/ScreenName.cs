@@ -11,4 +11,5 @@ public enum ScreenName
     Board,
     GameResult,
     DevLogin,
+    Help,
 }
