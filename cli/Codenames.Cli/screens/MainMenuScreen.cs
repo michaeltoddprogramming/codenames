@@ -5,6 +5,7 @@ using Codenames.Cli.Models;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
+using Spectre.Console;
 
 namespace Codenames.Cli.Screens;
 
@@ -80,10 +81,14 @@ public class MainMenuScreen(
         TerminalRenderer.StartFrame();
         renderer.RenderHeader("Codenames");
         renderer.RenderBlankLine();
-        renderer.RenderStatus($"Welcome, {authSession.Name ?? authSession.Email}!");
+        AnsiConsole.MarkupLine($"  [grey]Welcome,[/] [bold white]{Markup.Escape(authSession.Name ?? authSession.Email ?? "Player")}[/]");
+        renderer.RenderBlankLine();
+        AnsiConsole.Write(new Rule("[grey]Main Menu[/]").RuleStyle("grey"));
         renderer.RenderBlankLine();
         for (var i = 0; i < _menuItems.Length; i++)
             renderer.RenderMenuItem(_menuItems[i], isSelected: i == _selectedIndex);
+        renderer.RenderBlankLine();
+        AnsiConsole.MarkupLine("[dim]  Use arrow keys to navigate, Enter to select[/]");
         TerminalRenderer.EndFrame();
     }
 

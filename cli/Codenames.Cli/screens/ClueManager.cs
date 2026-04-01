@@ -39,10 +39,10 @@ public class ClueManager
     {
         if (clues != null && clues.Count > 0)
         {
-            AnsiConsole.Write(new Rule("Clues").RuleStyle("grey"));
+            AnsiConsole.Write(new Rule("[grey]Clues[/]").RuleStyle("grey"));
             foreach (var clue in clues)
             {
-                var color = clue.TeamName?.Equals("RED", StringComparison.OrdinalIgnoreCase) == true ? "red" : "blue";
+                var color = clue.TeamName?.Equals("RED", StringComparison.OrdinalIgnoreCase) == true ? "red" : "dodgerblue1";
                 AnsiConsole.Write(new Markup($"[{color}]{clue.TeamName}[/] - {clue.Word} {clue.Number}"));
             }
         }
@@ -58,9 +58,21 @@ public class ClueManager
         while (true)
         {
             _renderer.Clear();
-            AnsiConsole.MarkupLine("[yellow]Give clue[/]  [grey]format: {word} {number}  ·  Esc to cancel[/]");
-            _renderer.RenderBlankLine();
-            AnsiConsole.Markup("> ");
+
+            // Title panel
+            var titlePanel = new Panel("[bold gold1]Give Your Clue[/]")
+            {
+                Border = BoxBorder.Double,
+                Padding = new Padding(2, 0),
+            };
+            titlePanel.BorderStyle = new Style(foreground: Color.Gold1);
+            AnsiConsole.Write(titlePanel);
+            AnsiConsole.WriteLine();
+
+            AnsiConsole.MarkupLine("  [grey]Format:[/] [bold]WORD NUMBER[/]  [dim](e.g. WATER 3)[/]");
+            AnsiConsole.MarkupLine("  [dim]Press Esc to cancel[/]");
+            AnsiConsole.WriteLine();
+            AnsiConsole.Markup("[gold1]  > [/]");
 
             var input = ReadLineOrEsc();
             if (input is null) return false;
@@ -70,7 +82,7 @@ public class ClueManager
             var lastSpace = input.LastIndexOf(' ');
             if (lastSpace < 1)
             {
-                _renderer.RenderError("Format must be: {word} {number}  e.g.  WATER 3");
+                ShowInputError("Format must be: WORD NUMBER  (e.g. WATER 3)");
                 await Task.Delay(1200, cancellationToken);
                 continue;
             }
@@ -80,14 +92,14 @@ public class ClueManager
 
             if (string.IsNullOrEmpty(word) || word.Contains(' '))
             {
-                _renderer.RenderError("Clue must be a single word.");
+                ShowInputError("Clue must be a single word.");
                 await Task.Delay(1200, cancellationToken);
                 continue;
             }
 
             if (!int.TryParse(numStr, out var clueNumber) || clueNumber < 1 || clueNumber > 9)
             {
-                _renderer.RenderError("Number must be between 1 and 9.");
+                ShowInputError("Number must be between 1 and 9.");
                 await Task.Delay(1200, cancellationToken);
                 continue;
             }
@@ -100,11 +112,23 @@ public class ClueManager
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "Failed to submit clue");
-                _renderer.RenderError($"Server rejected clue: {ex.Message}");
+                ShowInputError($"Server rejected clue: {ex.Message}");
                 await Task.Delay(1500, cancellationToken);
                 return false;
             }
         }
+    }
+
+    private static void ShowInputError(string message)
+    {
+        AnsiConsole.WriteLine();
+        var errorPanel = new Panel($"[red]{Markup.Escape(message)}[/]")
+        {
+            Border = BoxBorder.Rounded,
+            Padding = new Padding(1, 0),
+        };
+        errorPanel.BorderStyle = new Style(foreground: Color.Red);
+        AnsiConsole.Write(errorPanel);
     }
 
     private static string? ReadLineOrEsc()

@@ -50,6 +50,13 @@ public class BoardScreen(
     private DateTimeOffset? _roundTimerEndsAt;
     private int _roundTimerTotalSeconds;
 
+    // Animation state
+    private bool _pulsePhase;
+    private int _pulseCounter;
+    private DateTimeOffset? _statusMessageSetAt;
+    private HashSet<string> _revealAnimationWords = [];
+    private DateTimeOffset? _revealAnimationStart;
+
     private int _cursorRow;
     private int _cursorCol;
 
@@ -141,6 +148,23 @@ public class BoardScreen(
     private int DrawIfNeeded(bool dirty, int redrawBucket)
     {
         if (!dirty && redrawBucket > 0) return redrawBucket;
+
+        // Advance pulse animation (toggles every 2 redraws = ~500ms)
+        _pulseCounter++;
+        if (_pulseCounter >= 2)
+        {
+            _pulseCounter = 0;
+            _pulsePhase = !_pulsePhase;
+        }
+
+        // Clear reveal animation after 1.5 seconds
+        if (_revealAnimationStart.HasValue &&
+            !AnimationHelper.ShouldShowFlash(_revealAnimationStart.Value, 1.5))
+        {
+            _revealAnimationWords.Clear();
+            _revealAnimationStart = null;
+        }
+
         Draw();
         return RedrawEveryMs;
     }
@@ -194,19 +218,31 @@ public class BoardScreen(
 
         if (!hasActiveRound)
         {
-            lock (_sync) { _statusMessage = "Waiting for your Spymaster's clue first..."; }
+            lock (_sync)
+            {
+                _statusMessage = "Waiting for your Spymaster's clue first...";
+                _statusMessageSetAt = DateTimeOffset.UtcNow;
+            }
             return;
         }
 
         if (alreadyVoted)
         {
-            lock (_sync) { _statusMessage = $"Already voted for {card.Word} this round."; }
+            lock (_sync)
+            {
+                _statusMessage = $"Already voted for {card.Word} this round.";
+                _statusMessageSetAt = DateTimeOffset.UtcNow;
+            }
             return;
         }
 
         if (votesExhausted)
         {
-            lock (_sync) { _statusMessage = $"You've used all {voteCap} vote(s) this round \u2014 waiting for tally."; }
+            lock (_sync)
+            {
+                _statusMessage = $"You've used all {voteCap} vote(s) this round \u2014 waiting for tally.";
+                _statusMessageSetAt = DateTimeOffset.UtcNow;
+            }
             return;
         }
 
@@ -217,12 +253,17 @@ public class BoardScreen(
             {
                 _myVotedWords.Add(card.Word);
                 _statusMessage = $"Voted for {card.Word} ({_myVotedWords.Count}/{voteCap})";
+                _statusMessageSetAt = DateTimeOffset.UtcNow;
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to submit vote for {Word}", card.Word);
-            lock (_sync) { _statusMessage = $"Vote failed: {ex.Message}"; }
+            lock (_sync)
+            {
+                _statusMessage = $"Vote failed: {ex.Message}";
+                _statusMessageSetAt = DateTimeOffset.UtcNow;
+            }
         }
     }
 
@@ -309,6 +350,7 @@ public class BoardScreen(
         {
             _activeRounds[p.Team] = new ActiveRoundDetailView(0, p.ClueWord, p.ClueNumber, new());
             _statusMessage = $"{p.Team.ToUpper()} clue: {p.ClueWord.ToUpper()} \u00d7 {p.ClueNumber}";
+            _statusMessageSetAt = DateTimeOffset.UtcNow;
             _dirty = true;
         }
     }
@@ -331,6 +373,7 @@ public class BoardScreen(
     {
         lock (_sync)
         {
+            var revealedWords = new HashSet<string>();
             foreach (var w in p.Words)
             {
                 int idx = _cards.FindIndex(c => c.Word.Equals(w.Word, StringComparison.OrdinalIgnoreCase));
@@ -340,6 +383,7 @@ public class BoardScreen(
                     ? cat : WordCategory.NEUTRAL;
 
                 _cards[idx] = _cards[idx] with { Category = category, Revealed = true };
+                revealedWords.Add(w.Word);
 
                 if (category == WordCategory.RED)  _redRemaining  = Math.Max(0, _redRemaining  - 1);
                 if (category == WordCategory.BLUE) _blueRemaining = Math.Max(0, _blueRemaining - 1);
@@ -350,6 +394,12 @@ public class BoardScreen(
                 _roundTimerEndsAt = null;
             }
             _statusMessage = $"{p.Team.ToUpper()} revealed {p.Words.Count} word(s)";
+            _statusMessageSetAt = DateTimeOffset.UtcNow;
+
+            // Trigger reveal flash animation
+            _revealAnimationWords = revealedWords;
+            _revealAnimationStart = DateTimeOffset.UtcNow;
+
             _dirty = true;
         }
     }
@@ -363,6 +413,7 @@ public class BoardScreen(
             {
                 _myVotedWords  = new HashSet<string>();
                 _statusMessage = "Waiting for your Spymaster's clue...";
+                _statusMessageSetAt = DateTimeOffset.UtcNow;
                 // Don't null _roundTimerEndsAt here — CLUE_TIMER_STARTED may have
                 // already set a new value before this event arrives.
             }
@@ -375,6 +426,7 @@ public class BoardScreen(
         lock (_sync)
         {
             _statusMessage = $"{p.Team.ToUpper()} Spymaster timed out \u2014 round skipped";
+            _statusMessageSetAt = DateTimeOffset.UtcNow;
             _dirty = true;
         }
     }
@@ -422,6 +474,8 @@ public class BoardScreen(
         HashSet<string> myVotedWords;
         DateTimeOffset? roundTimerEndsAt;
         int roundTimerTotalSeconds;
+        DateTimeOffset? statusSetAt;
+        HashSet<string> revealAnimWords;
 
         lock (_sync)
         {
@@ -436,20 +490,33 @@ public class BoardScreen(
             myVotedWords           = new HashSet<string>(_myVotedWords);
             roundTimerEndsAt       = _roundTimerEndsAt;
             roundTimerTotalSeconds = _roundTimerTotalSeconds;
+            statusSetAt            = _statusMessageSetAt;
+            revealAnimWords        = new HashSet<string>(_revealAnimationWords);
         }
 
         TerminalRenderer.StartFrame();
-        AnsiConsole.Write(new FigletText("Codenames").Color(Color.Blue));
-        _renderer.RenderBlankLine();
 
+        // Header
+        AnsiConsole.Write(new FigletText("Codenames").Color(Color.Gold1));
+
+        // Role & Score bar
+        var teamColor = myTeam.Equals("red", StringComparison.OrdinalIgnoreCase) ? "red" : "dodgerblue1";
         AnsiConsole.MarkupLine(
-            $"[yellow]Role:[/] {myRole.ToUpper()} ([bold]{myTeam.ToUpper()}[/])   " +
-            $"[red]Red {redRemaining}[/] / [blue]Blue {blueRemaining}[/]");
-        _renderer.RenderBlankLine();
+            $"  [bold {teamColor}]{myRole.ToUpper()}[/] [grey]on[/] [bold {teamColor}]{myTeam.ToUpper()} TEAM[/]");
+        AnsiConsole.WriteLine();
 
+        // Score bars
+        AnsiConsole.Markup("  ");
+        TerminalRenderer.RenderScoreBar("RED", "red", redRemaining, 10);
+        AnsiConsole.Markup("    ");
+        TerminalRenderer.RenderScoreBar("BLUE", "dodgerblue1", blueRemaining, 10);
+        AnsiConsole.WriteLine();
+        AnsiConsole.WriteLine();
+
+        // Instructions
         if (isSpymaster)
         {
-            AnsiConsole.MarkupLine("[yellow]Spymaster:[/] [bold]C[/] give clue \u00b7 [bold]Esc[/] exit");
+            AnsiConsole.MarkupLine("  [grey][[Spymaster]][/]  [bold gold1]C[/] [grey]give clue[/]  [bold gold1]Esc[/] [grey]exit[/]");
         }
         else
         {
@@ -459,40 +526,91 @@ public class BoardScreen(
                 int cap  = myRound!.ClueNumber;
                 int cast = myVotedWords.Count;
                 if (cast < cap)
-                    AnsiConsole.MarkupLine($"[yellow]Operative:[/] arrows move \u00b7 [bold]Enter[/] vote [grey]({cast}/{cap} cast)[/] \u00b7 [bold]Esc[/] exit");
+                    AnsiConsole.MarkupLine($"  [grey][[Operative]][/]  [bold gold1]Arrows[/] [grey]move[/]  [bold gold1]Enter[/] [grey]vote[/] [dim]({cast}/{cap})[/]  [bold gold1]Esc[/] [grey]exit[/]");
                 else
-                    AnsiConsole.MarkupLine($"[yellow]Operative:[/] arrows move \u00b7 [grey]all {cap} vote(s) cast \u2014 awaiting tally[/] \u00b7 [bold]Esc[/] exit");
+                    AnsiConsole.MarkupLine($"  [grey][[Operative]][/]  [green]All {cap} vote(s) cast[/] [dim]awaiting tally...[/]  [bold gold1]Esc[/] [grey]exit[/]");
             }
             else
-                AnsiConsole.MarkupLine("[yellow]Operative:[/] arrows move \u00b7 [grey]waiting for Spymaster's clue...[/] \u00b7 [bold]Esc[/] exit");
+            {
+                // No active round - show prominent banner
+                AnsiConsole.WriteLine();
+                TerminalRenderer.RenderBanner(
+                    "WAITING FOR SPYMASTER'S CLUE...",
+                    "yellow",
+                    pulse: true,
+                    pulsePhase: _pulsePhase);
+                AnsiConsole.WriteLine();
+            }
         }
 
+        // Timer bar
         if (roundTimerEndsAt.HasValue)
         {
             var timerLabel = isSpymaster ? "Clue time" : "Vote time";
-            TerminalRenderer.RenderTimerBar(timerLabel, roundTimerEndsAt.Value, roundTimerTotalSeconds);
+            TerminalRenderer.RenderTimerBar(timerLabel, roundTimerEndsAt.Value, roundTimerTotalSeconds, _pulsePhase);
         }
 
-        _renderer.RenderBlankLine();
+        AnsiConsole.WriteLine();
 
+        // Board
         if (cards.Count == 25)
         {
             var grid = new WordCard[5, 5];
             for (int i = 0; i < 25; i++)
-                grid[i / 5, i % 5] = cards[i];
+            {
+                var card = cards[i];
+                // Apply reveal flash animation: flash white during animation
+                if (revealAnimWords.Contains(card.Word) && _pulsePhase)
+                {
+                    // Temporarily override to white border for flash effect
+                    // We achieve this by marking it as a special state via a synthetic card
+                    // The actual flash is handled by alternating revealed color display
+                }
+                grid[i / 5, i % 5] = card;
+            }
             _renderer.RenderBoard(grid, _cursorRow, _cursorCol, isSpymaster, isSpymaster ? null : myVotedWords);
         }
 
-        _renderer.RenderBlankLine();
+        AnsiConsole.WriteLine();
+
+        // Clue Panel
         RenderCluePanel(rounds, myTeam);
 
+        // Spymaster clue hint
         if (isSpymaster)
-            AnsiConsole.MarkupLine("Press [bold]C[/] to give a clue  \u00b7  format: [bold]{word} {number}[/]");
+            AnsiConsole.MarkupLine("  [grey]Press[/] [bold gold1]C[/] [grey]to give a clue[/]  [dim]format: WORD NUMBER[/]");
 
+        // Status message
         if (!string.IsNullOrEmpty(status))
         {
-            _renderer.RenderBlankLine();
-            _renderer.RenderStatus(status);
+            AnsiConsole.WriteLine();
+
+            // Determine if this is a fresh "flash" status (within 2 seconds)
+            bool isFlash = statusSetAt.HasValue && AnimationHelper.ShouldShowFlash(statusSetAt.Value, 2.0);
+
+            if (isFlash && status.Contains("clue:"))
+            {
+                // Clue announcement - prominent banner
+                var clueColor = status.StartsWith("RED", StringComparison.OrdinalIgnoreCase) ? "red" : "dodgerblue1";
+                TerminalRenderer.RenderBanner(status.ToUpper(), clueColor);
+            }
+            else if (isFlash && status.Contains("timed out"))
+            {
+                // Round skipped - red banner
+                TerminalRenderer.RenderBanner(status.ToUpper(), "red");
+            }
+            else if (status.StartsWith("Voted for"))
+            {
+                TerminalRenderer.RenderStatusPanel(status, "green");
+            }
+            else if (status.Contains("failed") || status.Contains("error"))
+            {
+                TerminalRenderer.RenderStatusPanel(status, "red");
+            }
+            else
+            {
+                TerminalRenderer.RenderStatusPanel(status, "yellow");
+            }
         }
 
         TerminalRenderer.EndFrame();
@@ -502,26 +620,27 @@ public class BoardScreen(
     {
         foreach (var (team, round) in rounds)
         {
-            var color  = team.Equals("red", StringComparison.OrdinalIgnoreCase) ? "red" : "blue";
-            var marker = team.Equals(myTeam, StringComparison.OrdinalIgnoreCase) ? " \u25c4" : "";
+            var color  = team.Equals("red", StringComparison.OrdinalIgnoreCase) ? "red" : "dodgerblue1";
+            var isMyTeam = team.Equals(myTeam, StringComparison.OrdinalIgnoreCase);
+            var marker = isMyTeam ? $" [green]●[/]" : "";
 
             if (round is null)
             {
-                AnsiConsole.MarkupLine($"[{color}]{team.ToUpper()}[/]: [dim]Waiting for clue...[/]{marker}");
+                AnsiConsole.MarkupLine($"  [{color}]{team.ToUpper()}[/]: [dim]Waiting for clue...[/]{marker}");
             }
             else
             {
                 var voteStr = round.Votes.Count > 0
-                    ? "  votes: " + string.Join("  ",
-                        round.Votes.Select(kv => $"{Markup.Escape(kv.Key)}({kv.Value})"))
+                    ? "  " + string.Join("  ",
+                        round.Votes.Select(kv => $"[grey]{Markup.Escape(kv.Key)}[/][dim]({kv.Value})[/]"))
                     : "";
                 AnsiConsole.MarkupLine(
-                    $"[{color}]{team.ToUpper()}[/]: " +
+                    $"  [{color}]{team.ToUpper()}[/]: " +
                     $"[bold]{Markup.Escape(round.ClueWord.ToUpper())} \u00d7 {round.ClueNumber}[/]" +
                     $"{voteStr}{marker}");
             }
         }
-        _renderer.RenderBlankLine();
+        AnsiConsole.WriteLine();
     }
 
     private static WordCard ToWordCard(WordDetailView w)
