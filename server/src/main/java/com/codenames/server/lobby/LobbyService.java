@@ -1,6 +1,7 @@
 package com.codenames.server.lobby;
 
 import com.codenames.server.game.ClueTimerService;
+import com.codenames.server.game.GameEventType;
 import com.codenames.server.game.GameRepository;
 import com.codenames.server.game.MatchTimerService;
 import com.codenames.server.game.WordBank;
@@ -156,6 +157,9 @@ public class LobbyService {
         clueTimerService.start(gameId, "red");
         clueTimerService.start(gameId, "blue");
         matchTimerService.start(gameId, matchDurationMinutes);
+
+        sseBroadcaster.broadcast("game-" + gameId, GameEventType.ROUND_STARTED.name(), Map.of("team", "red"));
+        sseBroadcaster.broadcast("game-" + gameId, GameEventType.ROUND_STARTED.name(), Map.of("team", "blue"));
 
         return gameId;
     }

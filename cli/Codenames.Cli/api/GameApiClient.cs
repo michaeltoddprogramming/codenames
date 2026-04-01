@@ -1,4 +1,5 @@
 using Codenames.Cli.Models;
+using System.Net;
 
 namespace Codenames.Cli.Api;
 
@@ -13,9 +14,31 @@ public class GameApiClient(ApiClient api)
     public Task<GameStateResponse> GetStateAsync(int gameId, CancellationToken cancellationToken = default) =>
         api.GetAsync<GameStateResponse>($"/api/games/{gameId}", cancellationToken);
 
-    public Task SubmitClueAsync(int gameId, string word, int number, CancellationToken cancellationToken = default) =>
-        api.PostAsync($"/api/games/{gameId}/clue", new { word, number }, cancellationToken);
+    public Task<GameStateDetailResponse> GetDetailedStateAsync(int gameId, CancellationToken cancellationToken = default) =>
+        api.GetAsync<GameStateDetailResponse>($"/api/games/{gameId}/state", cancellationToken);
 
-    public Task SubmitVoteAsync(int gameId, int wordId, CancellationToken cancellationToken = default) =>
-        api.PostAsync($"/api/games/{gameId}/vote", new { wordId }, cancellationToken);
+    public Task SubmitClueAsync(int gameId, string clueWord, int clueNumber, CancellationToken cancellationToken = default) =>
+        api.PostAsync($"/api/games/{gameId}/clue", new { clueWord, clueNumber }, cancellationToken);
+
+    public Task SubmitVoteAsync(int gameId, string word, CancellationToken cancellationToken = default) =>
+        api.PostAsync($"/api/games/{gameId}/vote", new { word }, cancellationToken);
+
+    public async Task<int?> GetActiveGameAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await api.GetAsync<ActiveGameResponse>($"/api/players/me/active-game", cancellationToken);
+            return result?.GameId;
+        }
+        catch (ApiException ex) when (ex.Status == HttpStatusCode.NotFound || ex.Status == HttpStatusCode.NoContent)
+        {
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private record ActiveGameResponse(int GameId);
 }

@@ -21,4 +21,29 @@ public record WordResponse(int Id, string Word, string? Category, bool Revealed)
 
 public record ClueResponse(string Word, int Number, string TeamName, string SubmittedBy);
 
+public record GameStateDetailResponse(
+    int GameId,
+    string Status,
+    DateTimeOffset MatchEndsAt,
+    int RedRemaining,
+    int BlueRemaining,
+    string MyTeam,
+    string MyRole,
+    List<WordDetailView> Words,
+    Dictionary<string, ActiveRoundDetailView?> ActiveRounds);
+
+public record WordDetailView(string Word, string? Category, bool Revealed);
+
+public record ActiveRoundDetailView(
+    int RoundId,
+    string ClueWord,
+    int ClueNumber,
+    Dictionary<string, int> Votes);
+
+public record GameEndResult(
+    string? Winner,
+    string Reason,
+    int RedRemaining,
+    int BlueRemaining);
+
 public record GamePlayerInfo(string Username, string TeamName, string RoleName);

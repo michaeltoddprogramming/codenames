@@ -266,7 +266,16 @@ public class GameRepository {
         try {
             jdbcTemplate.update("CALL insert_round_vote(?, ?, ?)", roundId, word, username);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to insert vote: " + rootMessage(e), e);
+            String msg = rootMessage(e);
+            if (msg.contains("has already voted for")
+                    || msg.contains("has already used all")
+                    || msg.contains("is not available in game")
+                    || msg.contains("does not belong to the team")
+                    || msg.contains("Spymasters cannot cast votes")
+                    || msg.contains("duplicate key value")) {
+                throw new IllegalArgumentException(msg, e);
+            }
+            throw new RuntimeException("Failed to insert vote: " + msg, e);
         }
     }
 

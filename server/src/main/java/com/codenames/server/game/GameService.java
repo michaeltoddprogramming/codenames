@@ -71,11 +71,6 @@ public class GameService {
             GameEventType.CLUE_GIVEN.name(),
             Map.of("team", team, "clueWord", request.clueWord().trim(), "clueNumber", request.clueNumber())
         );
-        sseBroadcaster.broadcast(
-            "game-" + gameId,
-            GameEventType.ROUND_STARTED.name(),
-            Map.of("team", team, "clueWord", request.clueWord().trim(), "clueNumber", request.clueNumber(), "roundId", roundId)
-        );
     }
 
     public void submitVote(int gameId, User user, VoteRequest request) {

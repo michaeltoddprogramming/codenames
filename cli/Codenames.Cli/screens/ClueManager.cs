@@ -26,7 +26,7 @@ public class ClueManager
     {
         if (!string.IsNullOrEmpty(clueWord) && clueNumber.HasValue)
         {
-            AnsiConsole.Write(new Markup($"[yellow]Current clue:[/] [bold]{clueWord}[/] ({clueNumber})[/]"));
+            AnsiConsole.Write(new Markup($"[yellow]Current clue:[/] [bold]{Markup.Escape(clueWord!)}[/] ({clueNumber})"));
         }
         else
         {
@@ -55,36 +55,88 @@ public class ClueManager
 
     public async Task<bool> SubmitClueAsync(int gameId, CancellationToken cancellationToken)
     {
-        _renderer.Clear();
-        AnsiConsole.Write(new FigletText("Give Clue").Color(Color.Blue));
-        _renderer.RenderBlankLine();
-
-        AnsiConsole.Write(new Markup("[yellow]Enter clue word:[/] "));
-        var clueWord = AnsiConsole.Ask<string>("");
-
-        AnsiConsole.Write(new Markup("[yellow]Enter number:[/] "));
-        if (!int.TryParse(AnsiConsole.Ask<string>(""), out var clueNumber))
+        while (true)
         {
-            _renderer.RenderError("Invalid number. Press any key to return...");
-            Console.ReadKey(intercept: true);
-            return false;
-        }
+            _renderer.Clear();
+            AnsiConsole.MarkupLine("[yellow]Give clue[/]  [grey]format: {word} {number}  ·  Esc to cancel[/]");
+            _renderer.RenderBlankLine();
+            AnsiConsole.Markup("> ");
 
+            var input = ReadLineOrEsc();
+            if (input is null) return false;
+
+            input = input.Trim();
+
+            var lastSpace = input.LastIndexOf(' ');
+            if (lastSpace < 1)
+            {
+                _renderer.RenderError("Format must be: {word} {number}  e.g.  WATER 3");
+                await Task.Delay(1200, cancellationToken);
+                continue;
+            }
+
+            var word   = input[..lastSpace].Trim();
+            var numStr = input[(lastSpace + 1)..].Trim();
+
+            if (string.IsNullOrEmpty(word) || word.Contains(' '))
+            {
+                _renderer.RenderError("Clue must be a single word.");
+                await Task.Delay(1200, cancellationToken);
+                continue;
+            }
+
+            if (!int.TryParse(numStr, out var clueNumber) || clueNumber < 1 || clueNumber > 9)
+            {
+                _renderer.RenderError("Number must be between 1 and 9.");
+                await Task.Delay(1200, cancellationToken);
+                continue;
+            }
+
+            try
+            {
+                await _gameApiClient.SubmitClueAsync(gameId, word, clueNumber, cancellationToken);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to submit clue");
+                _renderer.RenderError($"Server rejected clue: {ex.Message}");
+                await Task.Delay(1500, cancellationToken);
+                return false;
+            }
+        }
+    }
+
+    private static string? ReadLineOrEsc()
+    {
+        var buffer = new System.Text.StringBuilder();
+        Console.CursorVisible = true;
         try
         {
-            await _gameApiClient.SubmitClueAsync(gameId, clueWord, clueNumber, cancellationToken);
-            _renderer.RenderStatus($"Clue submitted: {clueWord} {clueNumber}");
-            _renderer.RenderStatus("Press any key to return to board...");
-            Console.ReadKey(intercept: true);
-            return true;
+            while (true)
+            {
+                var key = Console.ReadKey(intercept: true);
+                if (key.Key == ConsoleKey.Escape)   return null;
+                if (key.Key == ConsoleKey.Enter)     break;
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (buffer.Length > 0)
+                    {
+                        buffer.Remove(buffer.Length - 1, 1);
+                        Console.Write("\b \b");
+                    }
+                    continue;
+                }
+                if (!char.IsControl(key.KeyChar))
+                {
+                    buffer.Append(key.KeyChar);
+                    Console.Write(key.KeyChar);
+                }
+            }
         }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to submit clue");
-            _renderer.RenderError($"Failed to submit clue: {ex.Message}");
-            _renderer.RenderStatus("Press any key to return to board...");
-            Console.ReadKey(intercept: true);
-            return false;
-        }
+        finally { Console.CursorVisible = false; }
+
+        Console.WriteLine();
+        return buffer.ToString();
     }
 }

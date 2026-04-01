@@ -21,7 +21,7 @@ public class TerminalRenderer
         AnsiConsole.Write(new Text($"{prefix}{label}\n", style));
     }
 
-    public void RenderBoard(WordCard[,] grid, int cursorRow, int cursorCol, bool showColors)
+    public void RenderBoard(WordCard[,] grid, int cursorRow, int cursorCol, bool showColors, IReadOnlySet<string>? myVotedWords = null)
     {
         var table = new Table().HideHeaders().Border(TableBorder.None);
 
@@ -35,7 +35,8 @@ public class TerminalRenderer
             {
                 var card = grid[row, col];
                 bool isSelected = row == cursorRow && col == cursorCol;
-                cells.Add(RenderCardAsBox(card, isSelected, showColors));
+                bool isVotedByMe = myVotedWords?.Contains(card.Word) ?? false;
+                cells.Add(RenderCardAsBox(card, isSelected, showColors, isVotedByMe));
             }
             table.AddRow(cells.ToArray());
         }
@@ -45,7 +46,7 @@ public class TerminalRenderer
 
     private static readonly int BoxWidth = 12;
 
-    private static Markup RenderCardAsBox(WordCard card, bool isSelected, bool showColors)
+    private static Markup RenderCardAsBox(WordCard card, bool isSelected, bool showColors, bool isVotedByMe = false)
     {
         var escapedWord = card.Word.Replace("[", "[[").Replace("]", "]]");
         var prefix = card.Revealed ? "✓ " : "";
@@ -78,6 +79,7 @@ public class TerminalRenderer
         if (color == Color.Blue) return "blue";
         if (color == Color.White) return "white";
         if (color == Color.SandyBrown) return "sandybrown";
+        if (color == Color.Yellow) return "yellow";
         return "grey";
     }
 

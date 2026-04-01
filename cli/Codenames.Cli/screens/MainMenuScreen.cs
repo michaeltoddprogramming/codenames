@@ -11,18 +11,27 @@ namespace Codenames.Cli.Screens;
 public class MainMenuScreen(
     AuthSession authSession,
     LobbySession lobbySession,
+    GameApiClient gameApiClient,
     LobbyApiClient lobbyApiClient,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
     INavigator navigator,
     ILogger<MainMenuScreen> logger) : IScreen
 {
-    private string[] _menuItems = [];
+    private static readonly string[] BaseMenuItems = ["Create Lobby", "Join Lobby", "Logout"];
+    private const string RejoinGameItem  = "Rejoin Game";
+    private const string RejoinLobbyItem = "Rejoin Lobby";
+    private string[] _menuItems = BaseMenuItems;
+    private int? _activeGameId;
     private LobbyStateResponse? _existingLobby;
+
     private int _selectedIndex;
 
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
+        await CheckForActiveGameAsync(cancellationToken);
+        if (cancellationToken.IsCancellationRequested) return;
+
         _existingLobby = await TryGetExistingLobbyAsync(cancellationToken);
         _menuItems = BuildMenuItems();
         _selectedIndex = 0;
@@ -56,8 +65,10 @@ public class MainMenuScreen(
     private string[] BuildMenuItems()
     {
         var items = new List<string>();
+        if (_activeGameId.HasValue)
+            items.Add(RejoinGameItem);
         if (_existingLobby is not null)
-            items.Add($"Rejoin Lobby ({_existingLobby.Code})");
+            items.Add($"{RejoinLobbyItem} ({_existingLobby.Code})");
         items.Add("Create Lobby");
         items.Add("Join Lobby");
         items.Add("Logout");
@@ -75,20 +86,39 @@ public class MainMenuScreen(
             renderer.RenderMenuItem(_menuItems[i], isSelected: i == _selectedIndex);
     }
 
+    private async Task CheckForActiveGameAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _activeGameId = await gameApiClient.GetActiveGameAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Could not check for active game");
+            _activeGameId = null;
+        }
+    }
+
     private async Task<bool> ExecuteSelectionAsync(CancellationToken cancellationToken)
     {
-        var selected = _menuItems[_selectedIndex];
-
-        if (selected.StartsWith("Rejoin Lobby") && _existingLobby is not null)
+        switch (_menuItems[_selectedIndex])
         {
-            if (authSession.UserId is { } userId)
-                lobbySession.SetLobby(_existingLobby, userId);
-            await navigator.GoToAsync(ScreenName.LobbyRoom, cancellationToken);
-            return false;
-        }
+            case RejoinGameItem:
+                if (_activeGameId.HasValue)
+                {
+                    lobbySession.SetGameId(_activeGameId.Value);
+                    await navigator.GoToAsync(ScreenName.Board, cancellationToken);
+                }
+                return false;
 
-        switch (selected)
-        {
+            case string s when s.StartsWith(RejoinLobbyItem):
+                if (_existingLobby is not null && authSession.UserId.HasValue)
+                {
+                    lobbySession.SetLobby(_existingLobby, authSession.UserId.Value);
+                    await navigator.GoToAsync(ScreenName.LobbyRoom, cancellationToken);
+                }
+                return false;
+
             case "Create Lobby":
                 await navigator.GoToAsync(ScreenName.CreateLobby, cancellationToken);
                 return false;

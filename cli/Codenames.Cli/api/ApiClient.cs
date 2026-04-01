@@ -1,5 +1,6 @@
 using Codenames.Cli.Auth;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace Codenames.Cli.Api;
 
@@ -52,7 +53,19 @@ public class ApiClient(HttpClient http, AuthSession session)
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new ApiException(response.StatusCode, body);
+            string message;
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                message = doc.RootElement.TryGetProperty("error", out var errProp)
+                    ? errProp.GetString() ?? body
+                    : body;
+            }
+            catch
+            {
+                message = body;
+            }
+            throw new ApiException(response.StatusCode, message);
         }
     }
 }

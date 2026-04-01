@@ -51,6 +51,11 @@ public class VoteTallyService {
     public void tallyAndReveal(int gameId, String team, int roundId) {
         logger.info("Tallying votes for game {} team {} round {}", gameId, team, roundId);
 
+        if (gameRepository.findActiveRound(gameId, team).isEmpty()) {
+            logger.info("Round {} for game {} team {} already resolved — skipping duplicate tally", roundId, gameId, team);
+            return;
+        }
+
         gameRepository.revealRoundWords(roundId);
         gameRepository.resolveGameRound(roundId);
 

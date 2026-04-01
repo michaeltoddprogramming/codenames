@@ -9,5 +9,6 @@ public enum ScreenName
     JoinLobby,
     LobbyRoom,
     Board,
+    GameResult,
     DevLogin,
 }
