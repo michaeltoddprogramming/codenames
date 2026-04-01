@@ -1,8 +1,9 @@
 package com.codenames.server.lobby;
 
+import com.codenames.server.game.ClueTimerService;
 import com.codenames.server.game.GameRepository;
+import com.codenames.server.game.MatchTimerService;
 import com.codenames.server.game.WordBank;
-import com.codenames.server.lobby.dto.CreateLobbyRequest;
 import com.codenames.server.shared.sse.SseBroadcaster;
 import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
@@ -37,12 +38,30 @@ class LobbyServiceTest {
     @Mock SseBroadcaster sseBroadcaster;
     @Mock SseEmitterRegistry sseEmitterRegistry;
     @Mock WordBank wordBank;
+    @Mock ClueTimerService clueTimerService;
+    @Mock MatchTimerService matchTimerService;
 
     LobbyService service;
 
     @BeforeEach
     void setUp() {
-        service = new LobbyService(lobbyRepository, gameRepository, sseBroadcaster, sseEmitterRegistry, wordBank);
+        lobbyRepository = mock(LobbyRepository.class);
+        gameRepository = mock(GameRepository.class);
+        sseBroadcaster = mock(SseBroadcaster.class);
+        sseEmitterRegistry = mock(SseEmitterRegistry.class);
+        wordBank = mock(WordBank.class);
+        clueTimerService = mock(ClueTimerService.class);
+        matchTimerService = mock(MatchTimerService.class);
+
+        service = new LobbyService(
+                lobbyRepository,
+                gameRepository,
+                sseBroadcaster,
+                sseEmitterRegistry,
+                wordBank,
+                clueTimerService,
+                matchTimerService
+        );
     }
 
     @Nested

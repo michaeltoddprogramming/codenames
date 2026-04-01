@@ -21,6 +21,7 @@ public class SseEmitterRegistry {
 
         emitter.onCompletion(() -> deregister(channelId, emitter));
         emitter.onTimeout(() -> deregister(channelId, emitter));
+        emitter.onError(ex -> deregister(channelId, emitter));
 
         return emitter;
     }
