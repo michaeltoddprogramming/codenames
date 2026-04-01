@@ -55,7 +55,7 @@ public class LobbyRepository {
         Instant cutoff = Instant.now().minus(maxAge);
         List<String> removed = new ArrayList<>();
         for (Lobby lobby : byId.values()) {
-            if (lobby.createdAt().isBefore(cutoff)) {
+            if (lobby.lastActivityAt().isBefore(cutoff)) {
                 remove(lobby.lobbyId());
                 removed.add(lobby.lobbyId());
             }

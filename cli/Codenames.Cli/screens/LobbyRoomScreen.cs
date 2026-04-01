@@ -29,6 +29,7 @@ public class LobbyRoomScreen(
     private bool _startRequested;
     private bool _connected;
     private bool _hasConnected;
+    private bool _lobbyExpired;
     private bool _dirty;
     private int _userId;
     private CancellationTokenSource? _streamCts;
@@ -53,6 +54,7 @@ public class LobbyRoomScreen(
         _startedGameId = null;
         _connected = false;
         _hasConnected = false;
+        _lobbyExpired = false;
         _dirty = true;
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -88,22 +90,45 @@ public class LobbyRoomScreen(
 
     private async Task<LobbyExitReason> RunLobbyLoopAsync(CancellationToken cancellationToken)
     {
+        var pingInterval = TimeSpan.FromMinutes(4);
+        var lastPing = DateTime.UtcNow;
+
         while (!cancellationToken.IsCancellationRequested)
         {
             LobbyStateResponse currentLobby;
+            bool lobbyExpired;
             bool connected;
             bool dirty;
             lock (_sync)
             {
                 if (_startedGameId.HasValue)
                     return LobbyExitReason.GameStarted;
+                lobbyExpired = _lobbyExpired;
                 currentLobby = _lobby!;
                 connected = _connected;
                 dirty = _dirty;
                 _dirty = false;
             }
 
-            if (dirty && !(lobbySession.IsHost && !_startRequested))
+            if (lobbyExpired)
+            {
+                return LobbyExitReason.UserLeft;
+            }
+
+            if (DateTime.UtcNow - lastPing > pingInterval)
+            {
+                try
+                {
+                    await lobbyApiClient.PingAsync(currentLobby.LobbyId, cancellationToken);
+                    lastPing = DateTime.UtcNow;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Failed to send lobby ping");
+                }
+            }
+
+            if (dirty)
                 DrawLobby(currentLobby, lobbySession.IsHost, connected);
 
             if (lobbySession.IsHost && !_startRequested)
@@ -128,18 +153,23 @@ public class LobbyRoomScreen(
         while (!cancellationToken.IsCancellationRequested)
         {
             LobbyStateResponse latestLobby;
+            bool lobbyExpired;
             bool connected;
             bool dirty;
             lock (_sync)
             {
                 if (_startedGameId.HasValue)
                     return LobbyExitReason.GameStarted;
+                lobbyExpired = _lobbyExpired;
                 latestLobby = _lobby ?? currentLobby;
                 connected = _connected;
                 dirty = _dirty;
                 _dirty = false;
             }
 
+            if (lobbyExpired)
+                return LobbyExitReason.UserLeft;
+                
             if (dirty)
                 DrawLobby(latestLobby, lobbySession.IsHost, connected);
 
@@ -213,6 +243,7 @@ public class LobbyRoomScreen(
     private async Task LeaveLobbyAsync(CancellationToken cancellationToken)
     {
         var lobbyId = lobbySession.CurrentLobby?.LobbyId;
+        bool wasExpired = _lobbyExpired;
         lobbySession.Clear();
 
         if (lobbyId is null) return;
@@ -223,8 +254,20 @@ public class LobbyRoomScreen(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to leave lobby {LobbyId}", lobbyId);
+            logger.LogDebug(ex, "Failed to leave lobby {LobbyId}", lobbyId);
         }
+
+        if (wasExpired)
+        {
+            renderer.Clear();
+            renderer.RenderHeader("Lobby Expired");
+            renderer.RenderBlankLine();
+            renderer.RenderError("The lobby has expired due to inactivity.");
+            renderer.RenderStatus("Press any key to continue...");
+            await keyboard.ReadKeyAsync(cancellationToken);
+        }
+
+        await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
     }
 
     private void OnEventReceived(object? _, SseEventArgs args)
@@ -233,6 +276,8 @@ public class LobbyRoomScreen(
             HandleLobbySnapshot(args.Data);
         else if (args.EventType.Equals("GAME_STARTED", StringComparison.OrdinalIgnoreCase))
             HandleGameStarted(args.Data);
+        else if (args.EventType.Equals("LOBBY_EXPIRED", StringComparison.OrdinalIgnoreCase))
+            HandleLobbyExpired();
     }
 
     private void OnConnectionStateChanged(object? sender, bool connected)
@@ -278,6 +323,14 @@ public class LobbyRoomScreen(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to parse GAME_STARTED event");
+        }
+    }
+
+    private void HandleLobbyExpired()
+    {
+        lock (_sync)
+        {
+            _lobbyExpired = true;
         }
     }
 
