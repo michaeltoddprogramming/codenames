@@ -9,7 +9,6 @@ using Spectre.Console;
 
 namespace Codenames.Cli.Screens;
 
-// Returned by Board.Run() to tell BoardScreen what the user did
 public enum BoardAction { None, Escape, GiveClue, CardSelected }
 public record BoardResult(BoardAction Action, WordCard? SelectedCard = null);
 

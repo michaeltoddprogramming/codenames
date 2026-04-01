@@ -43,26 +43,33 @@ public class TerminalRenderer
         AnsiConsole.Write(table);
     }
 
+    private static readonly int BoxWidth = 12;
+
     private static Markup RenderCardAsBox(WordCard card, bool isSelected, bool showColors)
     {
         var escapedWord = card.Word.Replace("[", "[[").Replace("]", "]]");
-        var label = card.Revealed ? $"✓ {escapedWord}" : escapedWord;
+        var prefix = card.Revealed ? "✓ " : "";
+        var label = prefix + escapedWord;
 
         var borderColor = card.GetBorderColor(showColors);
         var colorName = GetColorName(borderColor);
 
-        var tl = isSelected ? "╔" : "┌";
-        var tr = isSelected ? "╗" : "┐";
-        var bl = isSelected ? "╚" : "└";
-        var br = isSelected ? "╝" : "┘";
-        var h  = isSelected ? "═" : "─";
-        var v  = isSelected ? "║" : "│";
+        var (tl, tr, bl, br, h, v) = isSelected
+            ? ("╔", "╗", "╚", "╝", "═", "║")
+            : ("┌", "┐", "└", "┘", "─", "│");
 
-        var box = $"{tl}{h}{h}{h}{h}{h}{h}{tr}\n" +
-                  $"{v} {label} {v}\n" +
-                  $"{bl}{h}{h}{h}{h}{h}{h}{br}";
+        var innerWidth = BoxWidth - 2;
+        var padding = Math.Max(0, innerWidth - label.Length);
+        var leftPad = padding / 2;
+        var rightPad = padding - leftPad;
 
-        return new Markup($"[{colorName}]{box}[/]");
+        var topBottom = $"{tl}{string.Concat(Enumerable.Repeat(h, innerWidth))}{tr}";
+        var middle = $"{v}{new string(' ', leftPad)}{label}{new string(' ', rightPad)}{v}";
+        var bottom = $"{bl}{string.Concat(Enumerable.Repeat(h, innerWidth))}{br}";
+
+        return new Markup($"[{colorName}]{topBottom}[/]\n" +
+                          $"[{colorName}]{middle}[/]\n" +
+                          $"[{colorName}]{bottom}[/]");
     }
 
     private static string GetColorName(Color color)
