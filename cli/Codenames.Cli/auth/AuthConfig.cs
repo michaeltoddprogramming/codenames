@@ -11,6 +11,8 @@ public class AuthConfig
     public int CallbackPort { get; set; } = 54321;
     public string CallbackPath { get; set; } = "/callback";
 
+    public bool DevMode { get; set; } = false;
+
     public string RedirectUri => $"http://{CallbackHost}:{CallbackPort}{CallbackPath}";
     public string ListenerPrefix => $"http://{CallbackHost}:{CallbackPort}/";
 }

@@ -1,6 +1,8 @@
+using Codenames.Cli.Auth;
 using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Codenames.Cli.Screens;
 
@@ -8,9 +10,14 @@ public class WelcomeScreen(
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
     INavigator navigator,
+    IOptions<AuthConfig> authConfig,
     ILogger<WelcomeScreen> logger) : IScreen
 {
-    private static readonly string[] MenuItems = ["Login", "Quit"];
+    private readonly bool _devMode = authConfig.Value.DevMode;
+
+    private string[] MenuItems => _devMode
+        ? ["Login", "Dev Login", "Quit"]
+        : ["Login", "Quit"];
 
     private int _selectedIndex;
 
@@ -61,6 +68,9 @@ public class WelcomeScreen(
         {
             case "Login":
                 await navigator.GoToAsync(ScreenName.Login, cancellationToken);
+                return false;
+            case "Dev Login":
+                await navigator.GoToAsync(ScreenName.DevLogin, cancellationToken);
                 return false;
             case "Quit":
                 logger.LogInformation("User quit");

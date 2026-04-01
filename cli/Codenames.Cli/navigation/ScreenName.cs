@@ -8,4 +8,6 @@ public enum ScreenName
     CreateLobby,
     JoinLobby,
     LobbyRoom,
+    Board,
+    DevLogin,
 }

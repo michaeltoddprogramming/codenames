@@ -8,6 +8,8 @@ public class LobbySession
 
     public LobbyStateResponse? CurrentLobby { get; private set; }
     public bool IsHost { get; private set; }
+    public int? CurrentUserId { get; private set; }
+    public int? CurrentGameId { get; private set; }
 
     public void SetLobby(LobbyStateResponse lobby, int currentUserId)
     {
@@ -15,6 +17,16 @@ public class LobbySession
         {
             CurrentLobby = lobby;
             IsHost = lobby.HostUserId == currentUserId;
+            CurrentUserId = currentUserId;
+            CurrentGameId = null;
+        }
+    }
+
+    public void SetGameId(int gameId)
+    {
+        lock (_sync)
+        {
+            CurrentGameId = gameId;
         }
     }
 
@@ -24,6 +36,8 @@ public class LobbySession
         {
             CurrentLobby = null;
             IsHost = false;
+            CurrentUserId = null;
+            CurrentGameId = null;
         }
     }
 }

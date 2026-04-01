@@ -61,6 +61,8 @@ public static class AppHost
                 services.AddTransient<CreateLobbyScreen>();
                 services.AddTransient<JoinLobbyScreen>();
                 services.AddTransient<LobbyRoomScreen>();
+                services.AddTransient<BoardScreen>();
+                services.AddTransient<DevLoginScreen>();
 
                 // App runner
                 services.AddSingleton<AppRunner>();
