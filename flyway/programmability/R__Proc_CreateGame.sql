@@ -6,9 +6,11 @@ CREATE OR REPLACE PROCEDURE create_game(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_game_status_id INT;
-    v_word_count     INT;
-    v_invalid_types  TEXT;
+    v_game_status_id  INT;
+    v_word_count      INT;
+    v_invalid_types   TEXT;
+    v_red_remaining   INT;
+    v_blue_remaining  INT;
 BEGIN
     IF jsonb_typeof(p_words) <> 'array' THEN
         RAISE EXCEPTION 'p_words must be a JSON array';
@@ -36,16 +38,26 @@ BEGIN
         RAISE EXCEPTION 'Invalid word type(s): %', v_invalid_types;
     END IF;
 
+    SELECT COUNT(*) INTO v_red_remaining
+    FROM jsonb_array_elements(p_words) AS w
+    WHERE w->>'word_type' = 'red';
+
+    SELECT COUNT(*) INTO v_blue_remaining
+    FROM jsonb_array_elements(p_words) AS w
+    WHERE w->>'word_type' = 'blue';
+
     SELECT game_status_id INTO v_game_status_id
     FROM game_status
     WHERE game_status = 'active';
 
-    INSERT INTO game (game_status_id, match_duration_minutes, match_started_at, match_ends_at)
+    INSERT INTO game (game_status_id, match_duration_minutes, match_started_at, match_ends_at, red_remaining, blue_remaining)
     VALUES (
         v_game_status_id,
         p_match_duration_minutes,
         NOW(),
-        NOW() + (p_match_duration_minutes || ' minutes')::INTERVAL
+        NOW() + (p_match_duration_minutes || ' minutes')::INTERVAL,
+        v_red_remaining,
+        v_blue_remaining
     )
     RETURNING game_id INTO p_game_id;
 

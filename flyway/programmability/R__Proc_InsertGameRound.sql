@@ -20,23 +20,24 @@ BEGIN
         RAISE EXCEPTION 'Active game % not found', p_game_id;
     END IF;
 
-    IF EXISTS (
-        SELECT 1
-        FROM game_round gr
-        JOIN round_status rs ON rs.round_status_id = gr.round_status_id
-        WHERE gr.game_id      = p_game_id
-        AND   rs.round_status = 'active'
-        AND   gr.is_deleted   = FALSE
-    ) THEN
-        RAISE EXCEPTION 'Game % already has an active round', p_game_id;
-    END IF;
-
     SELECT game_team_id INTO v_game_team_id
     FROM game_team
     WHERE team_name = p_team_name;
 
     IF v_game_team_id IS NULL THEN
         RAISE EXCEPTION 'Team "%" not found', p_team_name;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM game_round gr
+        JOIN round_status rs ON rs.round_status_id = gr.round_status_id
+        WHERE gr.game_id      = p_game_id
+        AND   gr.game_team_id = v_game_team_id
+        AND   rs.round_status = 'active'
+        AND   gr.is_deleted   = FALSE
+    ) THEN
+        RAISE EXCEPTION 'Team "%" already has an active round in game %', p_team_name, p_game_id;
     END IF;
 
     SELECT round_status_id INTO v_round_status_id

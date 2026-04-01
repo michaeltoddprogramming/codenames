@@ -9,6 +9,8 @@ DECLARE
     v_game_id             INT;
     v_game_word_id        INT;
     v_game_participant_id INT;
+    v_clue_number         INT;
+    v_votes_cast          INT;
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM game_round gr
@@ -20,18 +22,20 @@ BEGIN
         RAISE EXCEPTION 'Active round % not found', p_game_round_id;
     END IF;
 
-    SELECT game_id INTO v_game_id
-    FROM game_round
-    WHERE game_round_id = p_game_round_id;
- 
+    SELECT gr.game_id, gr.clue_number
+    INTO v_game_id, v_clue_number
+    FROM game_round gr
+    WHERE gr.game_round_id = p_game_round_id;
+
     SELECT gw.game_word_id INTO v_game_word_id
     FROM game_word gw
     WHERE gw.word = p_word
     AND gw.game_id = v_game_id
+    AND gw.is_revealed = FALSE
     AND gw.is_deleted = FALSE;
 
     IF v_game_word_id IS NULL THEN
-        RAISE EXCEPTION 'Word "%" does not belong to game %', p_word, v_game_id;
+        RAISE EXCEPTION 'Word "%" is not available in game %', p_word, v_game_id;
     END IF;
 
     SELECT gp.game_participant_id INTO v_game_participant_id
@@ -64,20 +68,23 @@ BEGIN
         RAISE EXCEPTION 'Spymasters cannot cast votes';
     END IF;
 
-    IF EXISTS (
-        SELECT 1 FROM game_word
-        WHERE game_word_id = v_game_word_id
-        AND is_revealed = TRUE
-    ) THEN
-        RAISE EXCEPTION 'Word "%" has already been revealed', p_word;
-    END IF;
 
     IF EXISTS (
         SELECT 1 FROM round_vote
         WHERE game_round_id = p_game_round_id
         AND game_participant_id = v_game_participant_id
+        AND   game_word_id = v_game_word_id
     ) THEN
-        RAISE EXCEPTION 'User "%" has already voted in round %', p_username, p_game_round_id;
+        RAISE EXCEPTION 'User "%" has already voted for "%" in round %', p_username, p_word, p_game_round_id;
+    END IF;
+
+    SELECT COUNT(*) INTO v_votes_cast
+    FROM round_vote
+    WHERE game_round_id = p_game_round_id
+    AND   game_participant_id = v_game_participant_id;
+
+    IF v_votes_cast >= v_clue_number THEN
+        RAISE EXCEPTION 'User "%" has already used all % votes for round %', p_username, v_clue_number, p_game_round_id;
     END IF;
 
     INSERT INTO round_vote (game_round_id, game_word_id, game_participant_id)
