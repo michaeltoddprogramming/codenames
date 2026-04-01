@@ -14,3 +14,5 @@ public record TurnSkippedPayload(string Team, string Reason);
 public record TimerTickPayload(long SecondsRemaining);
 
 public record GameEndedPayload(string? Winner, string Reason, int RedRemaining, int BlueRemaining);
+
+public record RoundTimerStartedPayload(string Team, long EndsAtEpochMs, int DurationSeconds);

@@ -103,7 +103,7 @@ public class LobbyRoomScreen(
                 _dirty = false;
             }
 
-            if (dirty)
+            if (dirty && !(lobbySession.IsHost && !_startRequested))
                 DrawLobby(currentLobby, lobbySession.IsHost, connected);
 
             if (lobbySession.IsHost && !_startRequested)
@@ -141,11 +141,7 @@ public class LobbyRoomScreen(
             }
 
             if (dirty)
-            {
                 DrawLobby(latestLobby, lobbySession.IsHost, connected);
-                renderer.RenderBlankLine();
-                renderer.RenderStatus("Press Enter to start the game when ready (Esc to leave)...");
-            }
 
             if (Console.KeyAvailable)
             {
@@ -287,40 +283,69 @@ public class LobbyRoomScreen(
 
     private async Task ShowGameIdentityAsync(int gameId, CancellationToken cancellationToken)
     {
-        renderer.Clear();
-        renderer.RenderHeader("Game Starting");
-        renderer.RenderBlankLine();
+        List<GamePlayerInfo>? players = null;
+        string? fetchError = null;
 
         try
         {
-            var players = await gameApiClient.GetPlayersAsync(gameId, cancellationToken);
+            players = await gameApiClient.GetPlayersAsync(gameId, cancellationToken);
             lobbySession.SetGameId(gameId);
-
-            var byTeam = players
-                .GroupBy(p => p.TeamName, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(g => g.Key);
-
-            foreach (var team in byTeam)
-            {
-                AnsiConsole.Write(new Rule($"[bold]{team.Key} Team[/]").RuleStyle("grey"));
-                foreach (var player in team.OrderBy(p => p.RoleName))
-                {
-                    var spymasterTag = player.RoleName.Equals("spymaster", StringComparison.OrdinalIgnoreCase)
-                        ? " [yellow](Spymaster)[/]"
-                        : "";
-                    AnsiConsole.MarkupLine($"  {player.Username}{spymasterTag}");
-                }
-                renderer.RenderBlankLine();
-            }
         }
         catch (Exception ex)
         {
-            renderer.RenderError($"Game started, but failed to load participants: {ex.Message}");
-            renderer.RenderBlankLine();
+            fetchError = ex.Message;
         }
 
-        renderer.RenderStatus("Press any key to continue...");
-        await keyboard.ReadKeyAsync(cancellationToken);
+        // Countdown colors: 5=blue, 4=green, 3=yellow, 2=orange, 1=red
+        var countdownColors = new[] { Color.DodgerBlue1, Color.Green, Color.Yellow, Color.Orange1, Color.Red };
+
+        const int countdownSeconds = 5;
+        for (var remaining = countdownSeconds; remaining >= 0; remaining--)
+        {
+            TerminalRenderer.StartFrame();
+            renderer.RenderHeader("Game Starting");
+            AnsiConsole.WriteLine();
+
+            if (fetchError is not null)
+            {
+                renderer.RenderError($"Could not load participants: {fetchError}");
+            }
+            else if (players is not null)
+            {
+                var byTeam = players
+                    .GroupBy(p => p.TeamName, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(g => g.Key);
+
+                foreach (var team in byTeam)
+                {
+                    var teamColor = team.Key.Equals("red", StringComparison.OrdinalIgnoreCase) ? "red" : "dodgerblue1";
+                    AnsiConsole.Write(new Rule($"[bold {teamColor}]{team.Key.ToUpper()} TEAM[/]").RuleStyle(teamColor));
+                    foreach (var player in team.OrderBy(p => p.RoleName))
+                    {
+                        var spymasterTag = player.RoleName.Equals("spymaster", StringComparison.OrdinalIgnoreCase)
+                            ? " [gold1](Spymaster)[/]"
+                            : "";
+                        AnsiConsole.MarkupLine($"    {Markup.Escape(player.Username)}{spymasterTag}");
+                    }
+                    AnsiConsole.WriteLine();
+                }
+            }
+
+            if (remaining > 0)
+            {
+                var color = countdownColors[countdownSeconds - remaining];
+                AnsiConsole.Write(new FigletText(remaining.ToString()).Color(color).Centered());
+            }
+            else
+            {
+                AnsiConsole.Write(new FigletText("GO!").Color(Color.White).Centered());
+            }
+
+            TerminalRenderer.EndFrame();
+
+            if (remaining > 0)
+                await Task.Delay(1000, cancellationToken);
+        }
 
         await navigator.GoToAsync(ScreenName.Board, cancellationToken);
     }
@@ -329,7 +354,7 @@ public class LobbyRoomScreen(
     {
         renderer.Clear();
         renderer.RenderHeader("Lobby");
-        renderer.RenderBlankLine();
+        AnsiConsole.WriteLine();
         renderer.RenderError(message);
         renderer.RenderStatus("Press any key to continue...");
         await keyboard.ReadKeyAsync(cancellationToken);
@@ -337,30 +362,61 @@ public class LobbyRoomScreen(
 
     private void DrawLobby(LobbyStateResponse lobby, bool isHost, bool connected)
     {
-        renderer.Clear();
+        TerminalRenderer.StartFrame();
         renderer.RenderHeader("Lobby Room");
-        renderer.RenderBlankLine();
-        renderer.RenderStatus($"Join Code: {lobby.Code}");
-        renderer.RenderStatus($"Match duration: {lobby.MatchDurationMinutes} minutes");
-        renderer.RenderStatus($"Players in lobby: {lobby.Participants.Count}");
-        renderer.RenderStatus(isHost
-            ? "You are the host. Press Enter to start when ready."
-            : "Waiting for host to start.");
+        AnsiConsole.WriteLine();
 
+        // Connection indicator
         if (_hasConnected && !connected)
-            renderer.RenderError("Connection lost - reconnecting...");
+            AnsiConsole.MarkupLine("  [red]● Reconnecting...[/]");
+        else if (_hasConnected)
+            AnsiConsole.MarkupLine("  [green]● Connected[/]");
 
-        renderer.RenderBlankLine();
-        AnsiConsole.Write(new Rule("Players").RuleStyle("grey"));
+        AnsiConsole.WriteLine();
 
+        // Join code as a prominent panel
+        var codePanel = new Panel($"[bold white]{Markup.Escape(lobby.Code)}[/]")
+        {
+            Border = BoxBorder.Double,
+            Padding = new Padding(4, 0),
+            Header = new PanelHeader("[grey]JOIN CODE[/]"),
+        };
+        codePanel.BorderStyle = new Style(foreground: Color.Gold1);
+        AnsiConsole.Write(Align.Center(codePanel));
+        AnsiConsole.WriteLine();
+
+        AnsiConsole.MarkupLine($"  [grey]Match duration:[/] [bold]{lobby.MatchDurationMinutes} minutes[/]");
+        AnsiConsole.WriteLine();
+
+        // Player table
+        var table = new Table();
+        table.Border = TableBorder.Rounded;
+        table.BorderStyle = new Style(foreground: Color.Grey50);
+        table.AddColumn(new TableColumn("[bold]#[/]").Centered().Width(4));
+        table.AddColumn(new TableColumn("[bold]Player[/]").Width(25));
+        table.AddColumn(new TableColumn("[bold]Status[/]").Centered().Width(12));
+
+        int idx = 1;
         foreach (var participant in lobby.Participants)
         {
-            var hostTag = participant.IsHost ? " (host)" : "";
-            renderer.RenderStatus($"- {participant.Username}{hostTag}");
+            var hostTag = participant.IsHost ? "[gold1]HOST[/]" : "[dim]Ready[/]";
+            table.AddRow(
+                new Markup($"[grey]{idx}[/]"),
+                new Markup($"[white]{Markup.Escape(participant.Username)}[/]"),
+                new Markup(hostTag));
+            idx++;
         }
 
-        renderer.RenderBlankLine();
-        renderer.RenderStatus("Press Esc to leave lobby.");
+        AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+
+        // Host/guest instructions
+        if (isHost)
+            AnsiConsole.MarkupLine("  [bold gold1]You are the host.[/]  [bold gold1]Enter[/] [grey]to start[/]  [bold gold1]Esc[/] [grey]to leave[/]");
+        else
+            AnsiConsole.MarkupLine("  [dim]Waiting for host to start...[/]  [bold gold1]Esc[/] [grey]to leave[/]");
+
+        TerminalRenderer.EndFrame();
     }
 
     private enum LobbyExitReason { Continue, GameStarted, UserLeft, Cancelled }

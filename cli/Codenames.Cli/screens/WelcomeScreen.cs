@@ -3,6 +3,7 @@ using Codenames.Cli.Navigation;
 using Codenames.Cli.Tui;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Spectre.Console;
 
 namespace Codenames.Cli.Screens;
 
@@ -55,11 +56,16 @@ public class WelcomeScreen(
 
     private void Draw()
     {
-        renderer.Clear();
+        TerminalRenderer.StartFrame();
         renderer.RenderHeader("Codenames");
+        renderer.RenderBlankLine();
+        AnsiConsole.Write(new Rule("[grey]Welcome[/]").RuleStyle("grey"));
         renderer.RenderBlankLine();
         for (var i = 0; i < MenuItems.Length; i++)
             renderer.RenderMenuItem(MenuItems[i], isSelected: i == _selectedIndex);
+        renderer.RenderBlankLine();
+        AnsiConsole.MarkupLine("[dim]  Use arrow keys to navigate, Enter to select[/]");
+        TerminalRenderer.EndFrame();
     }
 
     private async Task<bool> ExecuteSelectionAsync(CancellationToken cancellationToken)

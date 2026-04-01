@@ -13,10 +13,13 @@ public record GameStateDetailResponse(
         String myTeam,
         String myRole,
         List<WordView> words,
-        Map<String, ActiveRoundView> activeRounds
+        Map<String, ActiveRoundView> activeRounds,
+        RoundTimerView roundTimer
 ) {
 
     public record WordView(String word, String category, boolean revealed) {}
 
     public record ActiveRoundView(int roundId, String clueWord, int clueNumber, Map<String, Long> votes) {}
+
+    public record RoundTimerView(String type, String team, long endsAtEpochMs, int durationSeconds) {}
 }

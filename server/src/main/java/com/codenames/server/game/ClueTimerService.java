@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -22,15 +23,19 @@ public class ClueTimerService {
     private record TimerKey(int gameId, String team) {}
 
     private final ConcurrentHashMap<TimerKey, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TimerKey, Long> deadlines = new ConcurrentHashMap<>(); // epoch ms
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
 
     private final SseBroadcaster sseBroadcaster;
+    private final GameRepository gameRepository;
     private final int clueTimerSeconds;
 
     public ClueTimerService(
             SseBroadcaster sseBroadcaster,
-            @Value("${app.game.clue-timer-seconds:90}") int clueTimerSeconds) {
+            GameRepository gameRepository,
+            @Value("${app.game.clue-timer-seconds:60}") int clueTimerSeconds) {
         this.sseBroadcaster = sseBroadcaster;
+        this.gameRepository = gameRepository;
         this.clueTimerSeconds = clueTimerSeconds;
     }
 
@@ -38,12 +43,21 @@ public class ClueTimerService {
         TimerKey key = new TimerKey(gameId, team);
         cancelKey(key);
 
+        long endsAtEpochMs = System.currentTimeMillis() + (long) clueTimerSeconds * 1000;
+        deadlines.put(key, endsAtEpochMs);
+
         ScheduledFuture<?> future = scheduler.schedule(
             () -> onExpiry(gameId, team),
             clueTimerSeconds,
             TimeUnit.SECONDS
         );
         timers.put(key, future);
+
+        sseBroadcaster.broadcast(
+            "game-" + gameId,
+            GameEventType.CLUE_TIMER_STARTED.name(),
+            Map.of("team", team, "endsAtEpochMs", endsAtEpochMs, "durationSeconds", clueTimerSeconds)
+        );
         logger.debug("Clue timer started for game {} team {}", gameId, team);
     }
 
@@ -59,6 +73,20 @@ public class ClueTimerService {
 
     private void onExpiry(int gameId, String team) {
         timers.remove(new TimerKey(gameId, team));
+
+        try {
+            GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
+            if (!"active".equals(meta.status())) {
+                logger.info("Clue timer expired for game {} team {} but game already ended — skipping", gameId, team);
+                deadlines.remove(new TimerKey(gameId, team));
+                return;
+            }
+        } catch (Exception e) {
+            logger.warn("Clue timer expired for game {} team {} but could not check game status — skipping", gameId, team, e);
+            deadlines.remove(new TimerKey(gameId, team));
+            return;
+        }
+
         logger.info("Clue timer expired for game {} team {} — broadcasting TURN_SKIPPED", gameId, team);
 
         sseBroadcaster.broadcast(
@@ -70,8 +98,17 @@ public class ClueTimerService {
         start(gameId, team);
     }
 
+    public Optional<Long> getDeadlineEpochMs(int gameId, String team) {
+        return Optional.ofNullable(deadlines.get(new TimerKey(gameId, team)));
+    }
+
+    public int getDurationSeconds() {
+        return clueTimerSeconds;
+    }
+
     private void cancelKey(TimerKey key) {
         ScheduledFuture<?> existing = timers.remove(key);
+        deadlines.remove(key);
         if (existing != null) {
             existing.cancel(false);
         }

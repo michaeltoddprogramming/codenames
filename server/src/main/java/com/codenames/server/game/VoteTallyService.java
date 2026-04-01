@@ -51,6 +51,12 @@ public class VoteTallyService {
     public void tallyAndReveal(int gameId, String team, int roundId) {
         logger.info("Tallying votes for game {} team {} round {}", gameId, team, roundId);
 
+        GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
+        if (!"active".equals(meta.status())) {
+            logger.info("Game {} already ended — skipping tally for team {} round {}", gameId, team, roundId);
+            return;
+        }
+
         if (gameRepository.findActiveRound(gameId, team).isEmpty()) {
             logger.info("Round {} for game {} team {} already resolved — skipping duplicate tally", roundId, gameId, team);
             return;
@@ -109,6 +115,12 @@ public class VoteTallyService {
     }
 
     public void endGame(int gameId, String winnerTeam, String reason) {
+        GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
+        if (!"active".equals(meta.status())) {
+            logger.info("Game {} already ended — skipping duplicate endGame (winner={}, reason={})", gameId, winnerTeam, reason);
+            return;
+        }
+
         gameRepository.endGame(gameId, winnerTeam, reason);
 
         int[] remaining = gameRepository.getGameRemainingCounts(gameId);

@@ -12,70 +12,119 @@ public class GameResultScreen(
     KeyboardHandler keyboard,
     INavigator navigator) : IScreen
 {
+    private static readonly Random Rng = new();
+
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
         var result = lobbySession.CurrentGameResult;
 
-        renderer.Clear();
-        renderer.RenderHeader("Game Over");
-        renderer.RenderBlankLine();
-
-        if (result is null)
+        // Confetti animation loop for 2 seconds (8 redraws at 250ms)
+        if (result?.Winner is not null)
         {
-            renderer.RenderStatus("Game ended.");
-        }
-        else
-        {
-            RenderResult(result);
+            for (int frame = 0; frame < 8 && !cancellationToken.IsCancellationRequested; frame++)
+            {
+                TerminalRenderer.StartFrame();
+                RenderGameOverContent(result, showConfetti: true);
+                TerminalRenderer.EndFrame();
+                await Task.Delay(250, cancellationToken);
+            }
         }
 
-        renderer.RenderBlankLine();
-        renderer.RenderStatus("Press any key to return to main menu...");
+        // Final static render
+        TerminalRenderer.StartFrame();
+        RenderGameOverContent(result, showConfetti: false);
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("  [dim]Press any key to return to main menu...[/]");
+        TerminalRenderer.EndFrame();
+
         await keyboard.ReadKeyAsync(cancellationToken);
 
         lobbySession.Clear();
         await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
     }
 
-    private void RenderResult(GameEndResult result)
+    private void RenderGameOverContent(GameEndResult? result, bool showConfetti)
     {
-        bool isRed = result.MyTeam.Equals("red", StringComparison.OrdinalIgnoreCase);
-        string teamColor = isRed ? "red" : "blue";
-        string teamName  = isRed ? "RED" : "BLUE";
+        renderer.RenderHeader("Game Over");
+        AnsiConsole.WriteLine();
 
+        if (result is null)
+        {
+            renderer.RenderStatus("Game ended.");
+            return;
+        }
+
+        // Confetti lines above winner text
+        if (showConfetti)
+        {
+            AnsiConsole.MarkupLine(AnimationHelper.ConfettiLine(60, Rng));
+            AnsiConsole.MarkupLine(AnimationHelper.ConfettiLine(60, Rng));
+        }
+
+        // Winner announcement as FigletText
         if (result.Winner is null)
         {
-            AnsiConsole.Write(new Markup("[yellow bold]   ══════════  DRAW  ══════════[/]"));
+            AnsiConsole.Write(new FigletText("DRAW").Color(Color.Yellow).Centered());
         }
         else if (result.Winner.Equals(result.MyTeam, StringComparison.OrdinalIgnoreCase))
         {
-            AnsiConsole.Write(new Markup($"[{teamColor} bold]   ══════════  {teamName} TEAM WON  ══════════[/]"));
+            AnsiConsole.Write(new FigletText("RED WINS").Color(Color.Red).Centered());
         }
         else
         {
-            AnsiConsole.Write(new Markup($"[{teamColor} bold]   ══════════  {teamName} TEAM LOST  ══════════[/]"));
+            AnsiConsole.Write(new FigletText("BLUE WINS").Color(Color.DodgerBlue1).Centered());
         }
 
-        renderer.RenderBlankLine();
+        // Confetti lines below winner text
+        if (showConfetti)
+        {
+            AnsiConsole.MarkupLine(AnimationHelper.ConfettiLine(60, Rng));
+            AnsiConsole.MarkupLine(AnimationHelper.ConfettiLine(60, Rng));
+        }
 
+        AnsiConsole.WriteLine();
+
+        // Reason
         var reasonText = result.Reason switch
         {
-            "ASSASSIN"     => "Assassin word revealed",
-            "ALL_REVEALED" => "All words revealed",
+            "ASSASSIN"      => "Assassin word revealed",
+            "ALL_REVEALED"  => "All words revealed",
             "TIMER_EXPIRED" => "Match timer expired",
-            "DRAW"         => "Match timer expired — equal scores",
-            _              => result.Reason
+            "DRAW"          => "Match timer expired — equal scores",
+            _               => result.Reason
         };
-        renderer.RenderStatus($"Reason: {reasonText}");
-        renderer.RenderBlankLine();
 
-        AnsiConsole.Write(new Markup($"[red]Red[/]  remaining: [bold]{result.RedRemaining}[/] / 10"));
-        renderer.RenderBlankLine();
-        AnsiConsole.Write(new Markup($"[blue]Blue[/] remaining: [bold]{result.BlueRemaining}[/] / 10"));
-        renderer.RenderBlankLine();
+        var reasonPanel = new Panel($"[bold]{Markup.Escape(reasonText)}[/]")
+        {
+            Border = BoxBorder.Rounded,
+            Padding = new Padding(2, 0),
+            Header = new PanelHeader("[grey]Reason[/]"),
+        };
+        reasonPanel.BorderStyle = new Style(foreground: Color.Grey);
+        AnsiConsole.Write(Align.Center(reasonPanel));
+        AnsiConsole.WriteLine();
 
+        // Score table
         int redRevealed  = 10 - result.RedRemaining;
         int blueRevealed = 10 - result.BlueRemaining;
-        AnsiConsole.Write(new Markup($"[red]Red[/]  revealed: [bold]{redRevealed}[/] / 10   [blue]Blue[/] revealed: [bold]{blueRevealed}[/] / 10"));
+
+        var table = new Table();
+        table.Border = TableBorder.Rounded;
+        table.BorderStyle = new Style(foreground: Color.Grey50);
+        table.AddColumn(new TableColumn("[bold]Team[/]").Centered());
+        table.AddColumn(new TableColumn("[bold]Revealed[/]").Centered());
+        table.AddColumn(new TableColumn("[bold]Remaining[/]").Centered());
+
+        table.AddRow(
+            new Markup("[red bold]RED[/]"),
+            new Markup($"[red]{redRevealed}[/] / 10"),
+            new Markup($"[red]{result.RedRemaining}[/]"));
+
+        table.AddRow(
+            new Markup("[dodgerblue1 bold]BLUE[/]"),
+            new Markup($"[dodgerblue1]{blueRevealed}[/] / 10"),
+            new Markup($"[dodgerblue1]{result.BlueRemaining}[/]"));
+
+        AnsiConsole.Write(Align.Center(table));
     }
 }
