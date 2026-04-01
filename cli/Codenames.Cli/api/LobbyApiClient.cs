@@ -34,4 +34,7 @@ public class LobbyApiClient(ApiClient api)
 
     public Task<StartGameResponse> StartAsync(string lobbyId, CancellationToken cancellationToken = default) =>
         api.PostAsync<StartGameResponse>($"/api/lobbies/{lobbyId}/start", new { }, cancellationToken);
+
+    public Task PingAsync(string lobbyId, CancellationToken cancellationToken = default) =>
+        api.PostAsync($"/api/lobbies/{lobbyId}/ping", new { }, cancellationToken);
 }

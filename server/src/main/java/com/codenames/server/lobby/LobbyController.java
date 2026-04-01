@@ -77,6 +77,7 @@ public class LobbyController {
             @PathVariable String lobbyId,
             @AuthenticationPrincipal User user) {
         lobbyService.ensureParticipant(lobbyId, user.userId());
+        lobbyService.touchLobby(lobbyId);
         SseEmitter emitter = sseEmitterRegistry.register(lobbyId);
         LobbyStateResponse snapshot = lobbyService.getLobbySnapshot(lobbyId);
         try {
@@ -86,5 +87,12 @@ public class LobbyController {
             emitter.completeWithError(e);
         }
         return emitter;
+    }
+
+    @PostMapping("/{lobbyId}/ping")
+    public ResponseEntity<Void> ping(@PathVariable String lobbyId, @AuthenticationPrincipal User user) {
+        lobbyService.ensureParticipant(lobbyId, user.userId());
+        lobbyService.touchLobby(lobbyId);
+        return ResponseEntity.ok().build();
     }
 }

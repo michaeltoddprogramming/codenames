@@ -29,7 +29,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class LobbyService {
 
     private static final Logger logger = LoggerFactory.getLogger(LobbyService.class);
-    private static final Duration LOBBY_MAX_AGE = Duration.ofMinutes(30);
+    private static final Duration LOBBY_MAX_AGE = Duration.ofMinutes(10);
 
     private final LobbyRepository lobbyRepository;
     private final GameRepository gameRepository;
@@ -81,6 +81,7 @@ public class LobbyService {
         if (!added) {
             throw new IllegalStateException("You are already in this lobby");
         }
+        lobby.touch();
         sseBroadcaster.broadcast(lobby.lobbyId(), LobbyEventType.PLAYER_JOINED.name(),
                 Map.of("userId", user.userId(), "username", user.username()));
         sseBroadcaster.broadcast(lobby.lobbyId(), LobbyEventType.LOBBY_SNAPSHOT.name(),
@@ -169,6 +170,11 @@ public class LobbyService {
                 .map(lobby -> LobbyStateResponse.from(lobby, matchDurationMinutes));
     }
 
+    public void touchLobby(String lobbyId) {
+        Lobby lobby = getLobbyById(lobbyId);
+        lobby.touch();
+    }
+    
     public LobbyStateResponse getLobbySnapshot(String lobbyId) {
         return LobbyStateResponse.from(getLobbyById(lobbyId), matchDurationMinutes);
     }
@@ -177,6 +183,7 @@ public class LobbyService {
     public void cleanupExpiredLobbies() {
         List<String> removed = lobbyRepository.removeExpired(LOBBY_MAX_AGE);
         for (String lobbyId : removed) {
+            sseBroadcaster.broadcast(lobbyId, LobbyEventType.LOBBY_EXPIRED.name(), Map.of());
             sseEmitterRegistry.removeChannel(lobbyId);
             logger.info("Removed expired lobby {}", lobbyId);
         }
