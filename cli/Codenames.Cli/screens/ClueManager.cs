@@ -137,6 +137,12 @@ public class ClueManager
         return $"Server rejected clue: {message}";
     }
 
+    private static void ShowInputError(string message)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"  [red]{Markup.Escape(message)}[/]");
+    }
+
     private static string? ReadLineOrEsc()
     {
         var buffer = new System.Text.StringBuilder();
