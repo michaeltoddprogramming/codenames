@@ -1,6 +1,5 @@
 package com.codenames.server.lobby;
 
-import com.codenames.server.lobby.dto.CreateLobbyRequest;
 import com.codenames.server.lobby.dto.LobbyStateResponse;
 import com.codenames.server.game.dto.StartGameResponse;
 import com.codenames.server.shared.sse.SseBroadcaster;
@@ -31,16 +30,15 @@ public class LobbyController {
 
     @PostMapping
     public ResponseEntity<LobbyStateResponse> createLobby(
-            @RequestBody CreateLobbyRequest request,
             @AuthenticationPrincipal User user) {
-        Lobby lobby = lobbyService.createLobby(request, user);
-        return ResponseEntity.ok(LobbyStateResponse.from(lobby));
+        Lobby lobby = lobbyService.createLobby(user);
+        return ResponseEntity.ok(lobbyService.getLobbySnapshot(lobby.lobbyId()));
     }
 
     @GetMapping("/{code}")
     public ResponseEntity<LobbyStateResponse> getLobby(@PathVariable String code) {
         Lobby lobby = lobbyService.getLobbyByCode(code);
-        return ResponseEntity.ok(LobbyStateResponse.from(lobby));
+        return ResponseEntity.ok(lobbyService.getLobbySnapshot(lobby.lobbyId()));
     }
 
     @PostMapping("/{code}/join")
@@ -48,7 +46,7 @@ public class LobbyController {
             @PathVariable String code,
             @AuthenticationPrincipal User user) {
         Lobby lobby = lobbyService.joinLobby(code, user);
-        return ResponseEntity.ok(LobbyStateResponse.from(lobby));
+        return ResponseEntity.ok(lobbyService.getLobbySnapshot(lobby.lobbyId()));
     }
 
     @PostMapping("/{lobbyId}/leave")

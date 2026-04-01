@@ -8,7 +8,6 @@ public record LobbyStateResponse(
         String lobbyId,
         String code,
         int hostUserId,
-        int playersPerTeam,
         int matchDurationMinutes,
         List<ParticipantInfo> participants
 ) {
@@ -16,7 +15,7 @@ public record LobbyStateResponse(
     public record ParticipantInfo(int userId, String username, boolean isHost) {
     }
 
-    public static LobbyStateResponse from(Lobby lobby) {
+        public static LobbyStateResponse from(Lobby lobby, int matchDurationMinutes) {
         List<ParticipantInfo> participantInfos = lobby.participants().stream()
                 .map(p -> new ParticipantInfo(
                         p.userId(),
@@ -28,8 +27,7 @@ public record LobbyStateResponse(
                 lobby.lobbyId(),
                 lobby.code(),
                 lobby.hostUserId(),
-                lobby.playersPerTeam(),
-                lobby.matchDurationMinutes(),
+                                matchDurationMinutes,
                 participantInfos
         );
     }

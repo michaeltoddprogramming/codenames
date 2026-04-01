@@ -21,12 +21,10 @@ public class LobbyRepository {
     private final ConcurrentHashMap<String, Lobby> byCode = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
 
-    public Lobby create(int hostUserId, String hostUsername, String hostEmail,
-                        int playersPerTeam, int matchDurationMinutes) {
+    public Lobby create(int hostUserId, String hostUsername, String hostEmail) {
         String lobbyId = UUID.randomUUID().toString();
         String code = generateUniqueCode();
-        Lobby lobby = new Lobby(lobbyId, code, hostUserId, hostUsername, hostEmail,
-                playersPerTeam, matchDurationMinutes);
+        Lobby lobby = new Lobby(lobbyId, code, hostUserId, hostUsername, hostEmail);
         byId.put(lobbyId, lobby);
         byCode.put(code, lobby);
         return lobby;

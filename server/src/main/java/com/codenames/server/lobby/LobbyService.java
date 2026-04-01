@@ -5,7 +5,6 @@ import com.codenames.server.game.GameRepository;
 import com.codenames.server.game.MatchTimerService;
 import com.codenames.server.game.WordBank;
 import com.codenames.server.game.dto.GameWord;
-import com.codenames.server.lobby.dto.CreateLobbyRequest;
 import com.codenames.server.lobby.dto.LobbyStateResponse;
 import com.codenames.server.shared.exception.LobbyNotFoundException;
 import com.codenames.server.shared.sse.SseBroadcaster;
@@ -13,6 +12,7 @@ import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -36,12 +36,14 @@ public class LobbyService {
     private final WordBank wordBank;
     private final ClueTimerService clueTimerService;
     private final MatchTimerService matchTimerService;
+    private final int matchDurationMinutes;
 
     public LobbyService(LobbyRepository lobbyRepository,
                         GameRepository gameRepository,
                         SseBroadcaster sseBroadcaster,
                         SseEmitterRegistry sseEmitterRegistry,
                         WordBank wordBank,
+                        @Value("${app.game.match-duration-minutes:5}") int matchDurationMinutes,
                         ClueTimerService clueTimerService,
                         MatchTimerService matchTimerService) {
         this.lobbyRepository = lobbyRepository;
@@ -51,18 +53,12 @@ public class LobbyService {
         this.wordBank = wordBank;
         this.clueTimerService = clueTimerService;
         this.matchTimerService = matchTimerService;
+        this.matchDurationMinutes = matchDurationMinutes;
     }
 
-    public Lobby createLobby(CreateLobbyRequest request, User user) {
+    public Lobby createLobby(User user) {
         ensureNotInAnyLobby(user.userId());
-        if (request.playersPerTeam() < 2 || request.playersPerTeam() > 5) {
-            throw new IllegalArgumentException("Players per team must be between 2 and 5");
-        }
-        if (request.matchDurationMinutes() < 1 || request.matchDurationMinutes() > 60) {
-            throw new IllegalArgumentException("Match duration must be between 1 and 60 minutes");
-        }
-        return lobbyRepository.create(user.userId(), user.username(), user.email(),
-                request.playersPerTeam(), request.matchDurationMinutes());
+        return lobbyRepository.create(user.userId(), user.username(), user.email());
     }
 
     public Lobby getLobbyByCode(String code) {
@@ -78,19 +74,15 @@ public class LobbyService {
     public Lobby joinLobby(String code, User user) {
         ensureNotInAnyLobby(user.userId());
         Lobby lobby = getLobbyByCode(code);
-        int requiredTotal = lobby.playersPerTeam() * 2;
         boolean added = lobby.tryAddParticipant(
-                new LobbyParticipant(user.userId(), user.username(), user.email()), requiredTotal);
+                new LobbyParticipant(user.userId(), user.username(), user.email()));
         if (!added) {
-            if (lobby.hasParticipant(user.userId())) {
-                throw new IllegalStateException("You are already in this lobby");
-            }
-            throw new IllegalStateException("Lobby is full (" + requiredTotal + " players max)");
+            throw new IllegalStateException("You are already in this lobby");
         }
         sseBroadcaster.broadcast(lobby.lobbyId(), LobbyEventType.PLAYER_JOINED.name(),
                 Map.of("userId", user.userId(), "username", user.username()));
         sseBroadcaster.broadcast(lobby.lobbyId(), LobbyEventType.LOBBY_SNAPSHOT.name(),
-                LobbyStateResponse.from(lobby));
+                LobbyStateResponse.from(lobby, matchDurationMinutes));
         return lobby;
     }
 
@@ -116,7 +108,7 @@ public class LobbyService {
         sseBroadcaster.broadcast(lobbyId, LobbyEventType.PLAYER_LEFT.name(),
                 Map.of("userId", user.userId(), "username", user.username()));
         sseBroadcaster.broadcast(lobbyId, LobbyEventType.LOBBY_SNAPSHOT.name(),
-                LobbyStateResponse.from(lobby));
+            LobbyStateResponse.from(lobby, matchDurationMinutes));
     }
 
     public void ensureParticipant(String lobbyId, int userId) {
@@ -132,11 +124,8 @@ public class LobbyService {
             throw new IllegalStateException("Only the host can start the game");
         }
 
-        int requiredTotal = lobby.playersPerTeam() * 2;
-        if (lobby.participants().size() != requiredTotal) {
-            throw new IllegalStateException(
-                    "Exactly " + requiredTotal + " players required to start (" +
-                    lobby.participants().size() + " present)");
+        if (lobby.participants().size() < 2) {
+            throw new IllegalStateException("At least 2 players are required to start the game");
         }
 
         List<String> words = wordBank.selectRandom(25);
@@ -155,7 +144,7 @@ public class LobbyService {
             }
         }
 
-        int gameId = gameRepository.createGame(wordList, lobby.matchDurationMinutes());
+        int gameId = gameRepository.createGame(wordList, matchDurationMinutes);
         List<Map<String, Object>> participants = assignTeamsAndRoles(lobby);
         gameRepository.insertParticipants(gameId, participants);
 
@@ -171,7 +160,7 @@ public class LobbyService {
     }
 
     public LobbyStateResponse getLobbySnapshot(String lobbyId) {
-        return LobbyStateResponse.from(getLobbyById(lobbyId));
+        return LobbyStateResponse.from(getLobbyById(lobbyId), matchDurationMinutes);
     }
 
     @Scheduled(fixedDelay = 60_000)

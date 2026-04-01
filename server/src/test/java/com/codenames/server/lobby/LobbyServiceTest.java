@@ -4,7 +4,7 @@ import com.codenames.server.game.ClueTimerService;
 import com.codenames.server.game.GameRepository;
 import com.codenames.server.game.MatchTimerService;
 import com.codenames.server.game.WordBank;
-import com.codenames.server.lobby.dto.CreateLobbyRequest;
+import com.codenames.server.lobby.dto.LobbyStateResponse;
 import com.codenames.server.shared.sse.SseBroadcaster;
 import com.codenames.server.shared.sse.SseEmitterRegistry;
 import com.codenames.server.user.User;
@@ -34,6 +34,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LobbyServiceTest {
 
+    private static final int MATCH_DURATION_MINUTES = 7;
+
     @Mock LobbyRepository lobbyRepository;
     @Mock GameRepository gameRepository;
     @Mock SseBroadcaster sseBroadcaster;
@@ -47,13 +49,20 @@ class LobbyServiceTest {
     @BeforeEach
     void setUp() {
         service = new LobbyService(
-                lobbyRepository,
-                gameRepository,
-                sseBroadcaster,
-                sseEmitterRegistry,
-                wordBank,
+                
+            lobbyRepository,
+               
+            gameRepository,
+               
+            sseBroadcaster,
+               
+            sseEmitterRegistry,
+               
+            wordBank,
                 clueTimerService,
                 matchTimerService
+        ,
+            MATCH_DURATION_MINUTES
         );
     }
 
@@ -62,20 +71,17 @@ class LobbyServiceTest {
     class CreateLobby {
 
         @Test
-        @DisplayName("rejects players-per-team outside supported bounds")
-        void rejectsInvalidPlayersPerTeam() {
+        @DisplayName("creates lobby without host choosing size or duration")
+        void createsLobbyWithoutHostConfig() {
             User user = new User(1, "host@test.com", "host");
+            Lobby created = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
             when(lobbyRepository.findByUserId(user.userId())).thenReturn(Optional.empty());
+            when(lobbyRepository.create(user.userId(), user.username(), user.email())).thenReturn(created);
 
-            assertThatThrownBy(() -> service.createLobby(new CreateLobbyRequest(1, 10), user))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("between 2 and 5");
+            Lobby result = service.createLobby(user);
 
-            assertThatThrownBy(() -> service.createLobby(new CreateLobbyRequest(6, 10), user))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("between 2 and 5");
-
-            verify(lobbyRepository, never()).create(anyInt(), eq("host"), eq("host@test.com"), anyInt(), anyInt());
+            assertThat(result).isSameAs(created);
+            verify(lobbyRepository).create(user.userId(), user.username(), user.email());
         }
 
         @Test
@@ -85,11 +91,11 @@ class LobbyServiceTest {
             User user = new User(1, "host@test.com", "host");
             when(lobbyRepository.findByUserId(user.userId())).thenReturn(Optional.of(existing));
 
-            assertThatThrownBy(() -> service.createLobby(new CreateLobbyRequest(2, 10), user))
+            assertThatThrownBy(() -> service.createLobby(user))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already in lobby");
 
-            verify(lobbyRepository, never()).create(anyInt(), eq("host"), eq("host@test.com"), anyInt(), anyInt());
+            verify(lobbyRepository, never()).create(user.userId(), user.username(), user.email());
         }
     }
 
@@ -100,7 +106,7 @@ class LobbyServiceTest {
         @Test
         @DisplayName("joins and broadcasts PLAYER_JOINED and LOBBY_SNAPSHOT")
         void joinsAndBroadcastsSnapshot() {
-            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
+            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
             User joiner = new User(2, "u2@test.com", "u2");
             when(lobbyRepository.findByUserId(joiner.userId())).thenReturn(Optional.empty());
             when(lobbyRepository.findByCode("ABC123")).thenReturn(Optional.of(lobby));
@@ -113,24 +119,26 @@ class LobbyServiceTest {
                 eq(LobbyEventType.PLAYER_JOINED.name()),
                 eq(Map.of("userId", 2, "username", "u2"))
             );
-            verify(sseBroadcaster).broadcast(eq("l-1"), eq(LobbyEventType.LOBBY_SNAPSHOT.name()), eq(com.codenames.server.lobby.dto.LobbyStateResponse.from(lobby)));
+            verify(sseBroadcaster).broadcast(
+                eq("l-1"),
+                eq(LobbyEventType.LOBBY_SNAPSHOT.name()),
+                eq(LobbyStateResponse.from(lobby, MATCH_DURATION_MINUTES))
+            );
         }
 
         @Test
-        @DisplayName("rejects join when lobby is full")
-        void rejectsWhenLobbyIsFull() {
-            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
-            lobby.tryAddParticipant(new LobbyParticipant(2, "u2", "u2@test.com"), 4);
-            lobby.tryAddParticipant(new LobbyParticipant(3, "u3", "u3@test.com"), 4);
-            lobby.tryAddParticipant(new LobbyParticipant(4, "u4", "u4@test.com"), 4);
+        @DisplayName("rejects duplicate join for same user")
+        void rejectsDuplicateJoin() {
+            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
+            lobby.tryAddParticipant(new LobbyParticipant(2, "u2", "u2@test.com"));
 
-            User joiner = new User(5, "u5@test.com", "u5");
+            User joiner = new User(2, "u2@test.com", "u2");
             when(lobbyRepository.findByUserId(joiner.userId())).thenReturn(Optional.empty());
             when(lobbyRepository.findByCode("ABC123")).thenReturn(Optional.of(lobby));
 
             assertThatThrownBy(() -> service.joinLobby("ABC123", joiner))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Lobby is full");
+                .hasMessageContaining("already in this lobby");
         }
     }
 
@@ -141,7 +149,7 @@ class LobbyServiceTest {
         @Test
         @DisplayName("removes lobby and channel when last participant leaves")
         void removesLobbyAndChannelWhenEmpty() {
-            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
+            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
             User host = new User(1, "host@test.com", "host");
             when(lobbyRepository.findById("l-1")).thenReturn(Optional.of(lobby));
 
@@ -155,8 +163,8 @@ class LobbyServiceTest {
         @Test
         @DisplayName("transfers host when current host leaves non-empty lobby")
         void transfersHostWhenHostLeaves() {
-            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
-            lobby.tryAddParticipant(new LobbyParticipant(2, "u2", "u2@test.com"), 4);
+            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
+            lobby.tryAddParticipant(new LobbyParticipant(2, "u2", "u2@test.com"));
             User host = new User(1, "host@test.com", "host");
             when(lobbyRepository.findById("l-1")).thenReturn(Optional.of(lobby));
 
@@ -164,7 +172,11 @@ class LobbyServiceTest {
 
             assertThat(lobby.hostUserId()).isEqualTo(2);
             verify(sseBroadcaster).broadcast(eq("l-1"), eq(LobbyEventType.PLAYER_LEFT.name()), eq(Map.of("userId", 1, "username", "host")));
-            verify(sseBroadcaster).broadcast(eq("l-1"), eq(LobbyEventType.LOBBY_SNAPSHOT.name()), eq(com.codenames.server.lobby.dto.LobbyStateResponse.from(lobby)));
+            verify(sseBroadcaster).broadcast(
+                eq("l-1"),
+                eq(LobbyEventType.LOBBY_SNAPSHOT.name()),
+                eq(LobbyStateResponse.from(lobby, MATCH_DURATION_MINUTES))
+            );
         }
     }
 
@@ -185,15 +197,15 @@ class LobbyServiceTest {
         }
 
         @Test
-        @DisplayName("rejects start when lobby is not full")
-        void rejectsStartWhenNotFull() {
-            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
+        @DisplayName("rejects start when fewer than two players are present")
+        void rejectsStartWhenLessThanTwoPlayers() {
+            Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
             User host = new User(1, "host@test.com", "host");
             when(lobbyRepository.findById("l-1")).thenReturn(Optional.of(lobby));
 
             assertThatThrownBy(() -> service.startGame("l-1", host))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Exactly 4 players required");
+                .hasMessageContaining("At least 2 players");
         }
 
         @Test
@@ -205,7 +217,7 @@ class LobbyServiceTest {
 
             when(lobbyRepository.findById("l-1")).thenReturn(Optional.of(lobby));
             when(wordBank.selectRandom(25)).thenReturn(words);
-            when(gameRepository.createGame(org.mockito.ArgumentMatchers.<List<Map<String, String>>>any(), eq(10))).thenReturn(77);
+            when(gameRepository.createGame(org.mockito.ArgumentMatchers.<List<Map<String, String>>>any(), eq(MATCH_DURATION_MINUTES))).thenReturn(77);
 
             int gameId = service.startGame("l-1", host);
 
@@ -265,12 +277,12 @@ class LobbyServiceTest {
     }
 
     private static Lobby fullLobby() {
-        Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com", 2, 10);
+        Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
         List<LobbyParticipant> extra = new ArrayList<>();
         extra.add(new LobbyParticipant(2, "u2", "u2@test.com"));
         extra.add(new LobbyParticipant(3, "u3", "u3@test.com"));
         extra.add(new LobbyParticipant(4, "u4", "u4@test.com"));
-        extra.forEach(p -> lobby.tryAddParticipant(p, 4));
+        extra.forEach(lobby::tryAddParticipant);
         return lobby;
     }
 }
