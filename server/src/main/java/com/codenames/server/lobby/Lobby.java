@@ -11,6 +11,7 @@ public class Lobby {
     private volatile int hostUserId;
     private final ConcurrentHashMap<Integer, LobbyParticipant> participants = new ConcurrentHashMap<>();
     private final Instant createdAt = Instant.now();
+    private volatile Instant lastActivityAt = Instant.now();
 
     public Lobby(String lobbyId, String code, int hostUserId, String hostUsername,
                  String hostEmail) {
@@ -24,6 +25,11 @@ public class Lobby {
     public String code()              { return code; }
     public int hostUserId()           { return hostUserId; }
     public Instant createdAt()        { return createdAt; }
+    public Instant lastActivityAt()   { return lastActivityAt; }
+
+    public void touch() {
+        this.lastActivityAt = Instant.now();
+    }
 
     public Collection<LobbyParticipant> participants() {
         return participants.values();
