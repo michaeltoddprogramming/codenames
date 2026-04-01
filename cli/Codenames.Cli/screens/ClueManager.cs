@@ -100,11 +100,29 @@ public class ClueManager
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "Failed to submit clue");
-                _renderer.RenderError($"Server rejected clue: {ex.Message}");
-                await Task.Delay(1500, cancellationToken);
+
+                _renderer.Clear();
+                AnsiConsole.MarkupLine("[yellow]Give clue[/]");
+                _renderer.RenderBlankLine();
+                _renderer.RenderError(GetFriendlyClueErrorMessage(ex));
+                _renderer.RenderBlankLine();
+                _renderer.RenderStatus("Press any key to return to the board...");
+                Console.ReadKey(intercept: true);
                 return false;
             }
         }
+    }
+
+    private static string GetFriendlyClueErrorMessage(Exception ex)
+    {
+        var message = ex.Message;
+
+        if (message.Contains("already has an active round", StringComparison.OrdinalIgnoreCase))
+        {
+            return "You already submitted a clue for this round. You must wait for the next round before submitting another clue.";
+        }
+
+        return $"Server rejected clue: {message}";
     }
 
     private static string? ReadLineOrEsc()
