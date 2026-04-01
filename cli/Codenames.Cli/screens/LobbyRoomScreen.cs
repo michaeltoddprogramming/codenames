@@ -287,40 +287,60 @@ public class LobbyRoomScreen(
 
     private async Task ShowGameIdentityAsync(int gameId, CancellationToken cancellationToken)
     {
-        renderer.Clear();
-        renderer.RenderHeader("Game Starting");
-        renderer.RenderBlankLine();
+        List<GamePlayerInfo>? players = null;
+        string? fetchError = null;
 
         try
         {
-            var players = await gameApiClient.GetPlayersAsync(gameId, cancellationToken);
+            players = await gameApiClient.GetPlayersAsync(gameId, cancellationToken);
             lobbySession.SetGameId(gameId);
-
-            var byTeam = players
-                .GroupBy(p => p.TeamName, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(g => g.Key);
-
-            foreach (var team in byTeam)
-            {
-                AnsiConsole.Write(new Rule($"[bold]{team.Key} Team[/]").RuleStyle("grey"));
-                foreach (var player in team.OrderBy(p => p.RoleName))
-                {
-                    var spymasterTag = player.RoleName.Equals("spymaster", StringComparison.OrdinalIgnoreCase)
-                        ? " [yellow](Spymaster)[/]"
-                        : "";
-                    AnsiConsole.MarkupLine($"  {player.Username}{spymasterTag}");
-                }
-                renderer.RenderBlankLine();
-            }
         }
         catch (Exception ex)
         {
-            renderer.RenderError($"Game started, but failed to load participants: {ex.Message}");
-            renderer.RenderBlankLine();
+            fetchError = ex.Message;
         }
 
-        renderer.RenderStatus("Press any key to continue...");
-        await keyboard.ReadKeyAsync(cancellationToken);
+        const int countdownSeconds = 5;
+        for (var remaining = countdownSeconds; remaining >= 0; remaining--)
+        {
+            TerminalRenderer.StartFrame();
+            renderer.RenderHeader("Game Starting");
+            renderer.RenderBlankLine();
+
+            if (fetchError is not null)
+            {
+                renderer.RenderError($"Could not load participants: {fetchError}");
+            }
+            else if (players is not null)
+            {
+                var byTeam = players
+                    .GroupBy(p => p.TeamName, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(g => g.Key);
+
+                foreach (var team in byTeam)
+                {
+                    AnsiConsole.Write(new Rule($"[bold]{team.Key} Team[/]").RuleStyle("grey"));
+                    foreach (var player in team.OrderBy(p => p.RoleName))
+                    {
+                        var spymasterTag = player.RoleName.Equals("spymaster", StringComparison.OrdinalIgnoreCase)
+                            ? " [yellow](Spymaster)[/]"
+                            : "";
+                        AnsiConsole.MarkupLine($"  {player.Username}{spymasterTag}");
+                    }
+                    renderer.RenderBlankLine();
+                }
+            }
+
+            if (remaining > 0)
+                renderer.RenderStatus($"Game begins in {remaining}...");
+            else
+                renderer.RenderStatus("Starting!");
+
+            TerminalRenderer.EndFrame();
+
+            if (remaining > 0)
+                await Task.Delay(1000, cancellationToken);
+        }
 
         await navigator.GoToAsync(ScreenName.Board, cancellationToken);
     }

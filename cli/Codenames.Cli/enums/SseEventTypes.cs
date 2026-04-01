@@ -11,4 +11,6 @@ public enum SseEventType
     TIMER_TICK,
     GAME_ENDED,
     HEARTBEAT,
+    CLUE_TIMER_STARTED,
+    VOTE_TIMER_STARTED,
 }

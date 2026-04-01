@@ -117,10 +117,10 @@ public class MatchTimerService {
                 reason = "DRAW";
             }
 
-            gameRepository.endGame(gameId, winner, reason);
-
             clueTimerService.cancelAll(gameId);
             voteTimerService.cancelAll(gameId);
+
+            gameRepository.endGame(gameId, winner, reason);
 
             sseBroadcaster.broadcast(
                 "game-" + gameId,

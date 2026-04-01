@@ -6,6 +6,7 @@ import com.codenames.server.game.dto.GameParticipantInfo;
 import com.codenames.server.game.dto.GamePlayerResponse;
 import com.codenames.server.game.dto.GameStateDetailResponse;
 import com.codenames.server.game.dto.GameStateDetailResponse.ActiveRoundView;
+import com.codenames.server.game.dto.GameStateDetailResponse.RoundTimerView;
 import com.codenames.server.game.dto.GameStateDetailResponse.WordView;
 import com.codenames.server.game.dto.GameWord;
 import com.codenames.server.game.dto.VoteRequest;
@@ -132,6 +133,19 @@ public class GameService {
             }
         }
 
+        // Resolve the active round timer (clue or vote) for this player's team
+        String team = participant.team();
+        RoundTimerView roundTimer = null;
+        Optional<Long> voteDeadline = voteTimerService.getDeadlineEpochMs(gameId, team);
+        if (voteDeadline.isPresent()) {
+            roundTimer = new RoundTimerView("vote", team, voteDeadline.get(), voteTimerService.getDurationSeconds());
+        } else {
+            Optional<Long> clueDeadline = clueTimerService.getDeadlineEpochMs(gameId, team);
+            if (clueDeadline.isPresent()) {
+                roundTimer = new RoundTimerView("clue", team, clueDeadline.get(), clueTimerService.getDurationSeconds());
+            }
+        }
+
         return new GameStateDetailResponse(
             gameId,
             meta.status(),
@@ -141,7 +155,8 @@ public class GameService {
             participant.team(),
             participant.role(),
             wordViews,
-            activeRounds
+            activeRounds,
+            roundTimer
         );
     }
 

@@ -8,5 +8,7 @@ public enum GameEventType {
     ROUND_STARTED,
     TURN_SKIPPED,
     TIMER_TICK,
-    GAME_ENDED
+    GAME_ENDED,
+    CLUE_TIMER_STARTED,
+    VOTE_TIMER_STARTED
 }

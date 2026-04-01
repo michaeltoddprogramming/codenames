@@ -16,7 +16,7 @@ public class GameResultScreen(
     {
         var result = lobbySession.CurrentGameResult;
 
-        renderer.Clear();
+        TerminalRenderer.StartFrame();
         renderer.RenderHeader("Game Over");
         renderer.RenderBlankLine();
 
@@ -31,6 +31,7 @@ public class GameResultScreen(
 
         renderer.RenderBlankLine();
         renderer.RenderStatus("Press any key to return to main menu...");
+        TerminalRenderer.EndFrame();
         await keyboard.ReadKeyAsync(cancellationToken);
 
         lobbySession.Clear();

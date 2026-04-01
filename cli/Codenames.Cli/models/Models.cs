@@ -30,7 +30,8 @@ public record GameStateDetailResponse(
     string MyTeam,
     string MyRole,
     List<WordDetailView> Words,
-    Dictionary<string, ActiveRoundDetailView?> ActiveRounds);
+    Dictionary<string, ActiveRoundDetailView?> ActiveRounds,
+    RoundTimerView? RoundTimer);
 
 public record WordDetailView(string Word, string? Category, bool Revealed);
 
@@ -39,6 +40,8 @@ public record ActiveRoundDetailView(
     string ClueWord,
     int ClueNumber,
     Dictionary<string, int> Votes);
+
+public record RoundTimerView(string Type, string Team, long EndsAtEpochMs, int DurationSeconds);
 
 public record GameEndResult(
     string? Winner,

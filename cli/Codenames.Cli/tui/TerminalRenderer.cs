@@ -103,6 +103,25 @@ public class TerminalRenderer
         return card;
     }
 
+    public static void RenderTimerBar(string label, DateTimeOffset endsAt, int totalSeconds)
+    {
+        const int barWidth = 30;
+        var remaining = endsAt - DateTimeOffset.UtcNow;
+        var secondsLeft = Math.Max(0, (int)remaining.TotalSeconds);
+        var fraction = totalSeconds > 0 ? Math.Clamp((double)secondsLeft / totalSeconds, 0.0, 1.0) : 0.0;
+
+        var filled = (int)Math.Round(fraction * barWidth);
+        var empty  = barWidth - filled;
+
+        string color;
+        if (fraction > 0.5) color = "green";
+        else if (fraction > 0.25) color = "yellow";
+        else color = "red";
+
+        var bar = new string('█', filled) + new string('░', empty);
+        AnsiConsole.MarkupLine($"  [{color}]⏱ {label,-16} [[{bar}]] {secondsLeft,2}s[/]");
+    }
+
     public void RenderStatus(string message) =>
         AnsiConsole.Write(new Text($"  {message}\n", new Style(foreground: Color.Aqua)));
 

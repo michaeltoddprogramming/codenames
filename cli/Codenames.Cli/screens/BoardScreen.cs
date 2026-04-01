@@ -23,7 +23,7 @@ public class BoardScreen(
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
     private const int KeyPollMs = 50;
-    private const int RedrawEveryMs = 1000;
+    private const int RedrawEveryMs = 250;
 
     private readonly GameApiClient _gameApi = gameApi;
     private readonly SseClient _sse = sse;
@@ -47,6 +47,8 @@ public class BoardScreen(
     private bool _gameEnded;
     private bool _dirty;
     private HashSet<string> _myVotedWords = [];
+    private DateTimeOffset? _roundTimerEndsAt;
+    private int _roundTimerTotalSeconds;
 
     private int _cursorRow;
     private int _cursorCol;
@@ -72,8 +74,13 @@ public class BoardScreen(
         try
         {
             await RunKeyboardLoopAsync(gameId, cancellationToken);
+            _logger.LogWarning("Board loop exited normally. gameEnded={GameEnded}, snapshotReceived={Snap}, ct.IsCancellationRequested={Ct}",
+                _gameEnded, _snapshotReceived, cancellationToken.IsCancellationRequested);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException oce)
+        {
+            _logger.LogWarning(oce, "Board loop cancelled for game {GameId}", gameId);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error in board loop for game {GameId}", gameId);
@@ -85,6 +92,8 @@ public class BoardScreen(
             await sseCts.CancelAsync();
             try { await sseTask; } catch { }
         }
+
+        _logger.LogWarning("Board leaving. gameEnded={GameEnded}, going to {Screen}", _gameEnded, _gameEnded ? "GameResult" : "MainMenu");
 
         if (_gameEnded)
             await _navigator.GoToAsync(ScreenName.GameResult, cancellationToken);
@@ -107,7 +116,7 @@ public class BoardScreen(
                 _dirty = false;
             }
 
-            if (ended) return;
+            if (ended) { _logger.LogWarning("Board loop: exiting because gameEnded"); return; }
             if (!ready) { await Task.Delay(KeyPollMs, ct); continue; }
 
             redrawBucket = DrawIfNeeded(dirty, redrawBucket);
@@ -115,7 +124,8 @@ public class BoardScreen(
             if (Console.KeyAvailable)
             {
                 var key = Console.ReadKey(intercept: true);
-                if (key.Key == ConsoleKey.Escape) return;
+                if (key.Key == ConsoleKey.Escape) { _logger.LogWarning("Board loop: exiting because Escape pressed"); return; }
+                _logger.LogDebug("Board loop: key pressed {Key}", key.Key);
                 await HandleKeyAsync(key, gameId, ct);
                 lock (_sync) { _dirty = true; }
             }
@@ -252,6 +262,10 @@ public class BoardScreen(
                 case SseEventType.GAME_ENDED:
                     ApplyGameEnded(JsonSerializer.Deserialize<GameEndedPayload>(e.Data, JsonOpts)!);
                     break;
+                case SseEventType.CLUE_TIMER_STARTED:
+                case SseEventType.VOTE_TIMER_STARTED:
+                    ApplyRoundTimerStarted(JsonSerializer.Deserialize<RoundTimerStartedPayload>(e.Data, JsonOpts)!);
+                    break;
             }
         }
         catch (Exception ex)
@@ -275,6 +289,17 @@ public class BoardScreen(
             _snapshotReceived = true;
             _myVotedWords     = [];
             _dirty            = true;
+
+            // Restore round timer from snapshot (covers timers that fired before we subscribed)
+            if (snap.RoundTimer is { } rt)
+            {
+                _roundTimerEndsAt      = DateTimeOffset.FromUnixTimeMilliseconds(rt.EndsAtEpochMs);
+                _roundTimerTotalSeconds = rt.DurationSeconds;
+            }
+            else
+            {
+                _roundTimerEndsAt = null;
+            }
         }
     }
 
@@ -320,7 +345,10 @@ public class BoardScreen(
                 if (category == WordCategory.BLUE) _blueRemaining = Math.Max(0, _blueRemaining - 1);
             }
             if (p.Team.Equals(_myTeam, StringComparison.OrdinalIgnoreCase))
-                _myVotedWords = new HashSet<string>();
+            {
+                _myVotedWords     = new HashSet<string>();
+                _roundTimerEndsAt = null;
+            }
             _statusMessage = $"{p.Team.ToUpper()} revealed {p.Words.Count} word(s)";
             _dirty = true;
         }
@@ -335,6 +363,8 @@ public class BoardScreen(
             {
                 _myVotedWords  = new HashSet<string>();
                 _statusMessage = "Waiting for your Spymaster's clue...";
+                // Don't null _roundTimerEndsAt here — CLUE_TIMER_STARTED may have
+                // already set a new value before this event arrives.
             }
             _dirty = true;
         }
@@ -358,6 +388,17 @@ public class BoardScreen(
         }
     }
 
+    private void ApplyRoundTimerStarted(RoundTimerStartedPayload p)
+    {
+        lock (_sync)
+        {
+            if (!p.Team.Equals(_myTeam, StringComparison.OrdinalIgnoreCase)) return;
+            _roundTimerEndsAt = DateTimeOffset.FromUnixTimeMilliseconds(p.EndsAtEpochMs);
+            _roundTimerTotalSeconds = p.DurationSeconds;
+            _dirty = true;
+        }
+    }
+
     private void ApplyGameEnded(GameEndedPayload p)
     {
         lock (_sync)
@@ -377,36 +418,33 @@ public class BoardScreen(
         string myTeam, myRole;
         Dictionary<string, ActiveRoundDetailView?> rounds;
         int    redRemaining, blueRemaining;
-        DateTimeOffset matchEndsAt;
         string? status;
         HashSet<string> myVotedWords;
+        DateTimeOffset? roundTimerEndsAt;
+        int roundTimerTotalSeconds;
 
         lock (_sync)
         {
-            cards         = new List<WordCard>(_cards);
-            isSpymaster   = _isSpymaster;
-            myTeam        = _myTeam;
-            myRole        = _myRole;
-            rounds        = new Dictionary<string, ActiveRoundDetailView?>(_activeRounds);
-            redRemaining  = _redRemaining;
-            blueRemaining = _blueRemaining;
-            matchEndsAt   = _matchEndsAt;
-            status        = _statusMessage;
-            myVotedWords  = new HashSet<string>(_myVotedWords);
+            cards                  = new List<WordCard>(_cards);
+            isSpymaster            = _isSpymaster;
+            myTeam                 = _myTeam;
+            myRole                 = _myRole;
+            rounds                 = new Dictionary<string, ActiveRoundDetailView?>(_activeRounds);
+            redRemaining           = _redRemaining;
+            blueRemaining          = _blueRemaining;
+            status                 = _statusMessage;
+            myVotedWords           = new HashSet<string>(_myVotedWords);
+            roundTimerEndsAt       = _roundTimerEndsAt;
+            roundTimerTotalSeconds = _roundTimerTotalSeconds;
         }
 
         TerminalRenderer.StartFrame();
         AnsiConsole.Write(new FigletText("Codenames").Color(Color.Blue));
         _renderer.RenderBlankLine();
 
-        var timeLeft = matchEndsAt - DateTimeOffset.UtcNow;
-        var timeStr  = timeLeft.TotalSeconds > 0
-            ? $"{(int)timeLeft.TotalMinutes}:{timeLeft.Seconds:D2}"
-            : "0:00";
-
         AnsiConsole.MarkupLine(
             $"[yellow]Role:[/] {myRole.ToUpper()} ([bold]{myTeam.ToUpper()}[/])   " +
-            $"[red]Red {redRemaining}[/] / [blue]Blue {blueRemaining}[/]   [grey]\u23f1 {timeStr}[/]");
+            $"[red]Red {redRemaining}[/] / [blue]Blue {blueRemaining}[/]");
         _renderer.RenderBlankLine();
 
         if (isSpymaster)
@@ -428,6 +466,13 @@ public class BoardScreen(
             else
                 AnsiConsole.MarkupLine("[yellow]Operative:[/] arrows move \u00b7 [grey]waiting for Spymaster's clue...[/] \u00b7 [bold]Esc[/] exit");
         }
+
+        if (roundTimerEndsAt.HasValue)
+        {
+            var timerLabel = isSpymaster ? "Clue time" : "Vote time";
+            TerminalRenderer.RenderTimerBar(timerLabel, roundTimerEndsAt.Value, roundTimerTotalSeconds);
+        }
+
         _renderer.RenderBlankLine();
 
         if (cards.Count == 25)
