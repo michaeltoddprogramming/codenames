@@ -197,15 +197,17 @@ class LobbyServiceTest {
         }
 
         @Test
-        @DisplayName("rejects start when fewer than two players are present")
-        void rejectsStartWhenLessThanTwoPlayers() {
+        @DisplayName("rejects start when fewer than four players are present")
+        void rejectsStartWhenLessThanFourPlayers() {
             Lobby lobby = new Lobby("l-1", "ABC123", 1, "host", "host@test.com");
+            lobby.tryAddParticipant(new LobbyParticipant(2, "u2", "u2@test.com"));
+            lobby.tryAddParticipant(new LobbyParticipant(3, "u3", "u3@test.com"));
             User host = new User(1, "host@test.com", "host");
             when(lobbyRepository.findById("l-1")).thenReturn(Optional.of(lobby));
 
             assertThatThrownBy(() -> service.startGame("l-1", host))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("At least 2 players");
+                .hasMessageContaining("At least 4 players");
         }
 
         @Test

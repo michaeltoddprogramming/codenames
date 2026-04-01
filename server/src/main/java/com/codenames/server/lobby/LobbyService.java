@@ -124,8 +124,8 @@ public class LobbyService {
             throw new IllegalStateException("Only the host can start the game");
         }
 
-        if (lobby.participants().size() < 2) {
-            throw new IllegalStateException("At least 2 players are required to start the game");
+        if (lobby.participants().size() < 4) {
+            throw new IllegalStateException("At least 4 players are required to start the game");
         }
 
         List<String> words = wordBank.selectRandom(25);
@@ -180,8 +180,8 @@ public class LobbyService {
     }
 
     private List<Map<String, Object>> assignTeamsAndRoles(Lobby lobby) {
-        if (lobby.participants().size() < 2) {
-            throw new IllegalStateException("Need at least 2 players to start the game.");
+        if (lobby.participants().size() < 4) {
+            throw new IllegalStateException("Need at least 4 players to start the game.");
         }
 
         ThreadLocalRandom rng = ThreadLocalRandom.current();

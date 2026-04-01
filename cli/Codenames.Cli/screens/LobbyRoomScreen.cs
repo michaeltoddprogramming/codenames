@@ -27,6 +27,7 @@ public class LobbyRoomScreen(
     private bool _startRequested;
     private bool _connected;
     private int _userId;
+    private CancellationTokenSource? _streamCts;
 
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
@@ -49,6 +50,7 @@ public class LobbyRoomScreen(
         _connected = false;
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _streamCts = linkedCts;
         sseClient.EventReceived += OnEventReceived;
         sseClient.ConnectionStateChanged += OnConnectionStateChanged;
         var streamTask = sseClient.ConnectAsync($"/api/lobbies/{_lobby.LobbyId}/events", linkedCts.Token);
@@ -70,6 +72,7 @@ public class LobbyRoomScreen(
         finally
         {
             await linkedCts.CancelAsync();
+            _streamCts = null;
             sseClient.EventReceived -= OnEventReceived;
             sseClient.ConnectionStateChanged -= OnConnectionStateChanged;
             try { await streamTask; }
@@ -118,11 +121,19 @@ public class LobbyRoomScreen(
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            LobbyStateResponse latestLobby;
+            bool connected;
             lock (_sync)
             {
                 if (_startedGameId.HasValue)
                     return LobbyExitReason.GameStarted;
+                latestLobby = _lobby ?? currentLobby;
+                connected = _connected;
             }
+
+            DrawLobby(latestLobby, lobbySession.IsHost, connected);
+            renderer.RenderBlankLine();
+            renderer.RenderStatus("Press Enter to start the game when ready (Esc to leave)...");
 
             if (Console.KeyAvailable)
             {
@@ -140,6 +151,7 @@ public class LobbyRoomScreen(
         {
             if (_startedGameId.HasValue)
                 return LobbyExitReason.GameStarted;
+            currentLobby = _lobby ?? currentLobby;
         }
 
         if (currentLobby.Participants.Count < 4)
@@ -246,6 +258,7 @@ public class LobbyRoomScreen(
             if (doc.RootElement.TryGetProperty("gameId", out var el) && el.TryGetInt32(out var gameId))
             {
                 lock (_sync) { _startedGameId = gameId; }
+                _streamCts?.Cancel();
             }
         }
         catch (Exception ex)
