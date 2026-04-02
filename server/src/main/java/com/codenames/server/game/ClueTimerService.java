@@ -87,6 +87,18 @@ public class ClueTimerService {
             return;
         }
 
+        try {
+            if (gameRepository.findActiveRound(gameId, team).isPresent()) {
+                logger.info("Clue timer expired for game {} team {} but active round already exists — spymaster submitted just before timeout, skipping", gameId, team);
+                deadlines.remove(new TimerKey(gameId, team));
+                return;
+            }
+        } catch (Exception e) {
+            logger.warn("Clue timer expired for game {} team {} but could not check active round — skipping re-arm", gameId, team, e);
+            deadlines.remove(new TimerKey(gameId, team));
+            return;
+        }
+
         logger.info("Clue timer expired for game {} team {} — broadcasting TURN_SKIPPED", gameId, team);
 
         sseBroadcaster.broadcast(

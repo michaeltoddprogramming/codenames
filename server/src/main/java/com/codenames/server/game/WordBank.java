@@ -37,8 +37,12 @@ public class WordBank {
         if (words == null || words.isEmpty()) {
             throw new IllegalStateException("WordBank is empty - CSV file may not have loaded");
         }
+        if (words.size() < count) {
+            throw new IllegalStateException(
+                "WordBank has only " + words.size() + " words but " + count + " are required — check words.csv");
+        }
         var shuffled = new ArrayList<>(words);
         Collections.shuffle(shuffled);
-        return shuffled.subList(0, Math.min(count, shuffled.size()));
+        return shuffled.subList(0, count);
     }
 }
