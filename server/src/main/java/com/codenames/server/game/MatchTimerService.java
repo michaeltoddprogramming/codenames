@@ -120,6 +120,12 @@ public class MatchTimerService {
             clueTimerService.cancelAll(gameId);
             voteTimerService.cancelAll(gameId);
 
+            GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
+            if (!"active".equals(meta.status())) {
+                logger.info("Match timer expired for game {} but game already ended", gameId);
+                return;
+            }
+
             gameRepository.endGame(gameId, winner, reason);
 
             sseBroadcaster.broadcast(
