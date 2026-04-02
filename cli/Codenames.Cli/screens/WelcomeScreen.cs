@@ -10,6 +10,7 @@ namespace Codenames.Cli.Screens;
 public class WelcomeScreen(
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
+    SfxPlayer sfx,
     INavigator navigator,
     IOptions<AuthConfig> authConfig,
     ILogger<WelcomeScreen> logger) : IScreen
@@ -34,15 +35,18 @@ public class WelcomeScreen(
             {
                 case ConsoleKey.UpArrow:
                     _selectedIndex = Math.Max(0, _selectedIndex - 1);
+                    sfx.PlayCursorMove();
                     Draw();
                     break;
 
                 case ConsoleKey.DownArrow:
                     _selectedIndex = Math.Min(MenuItems.Length - 1, _selectedIndex + 1);
+                    sfx.PlayCursorMove();
                     Draw();
                     break;
 
                 case ConsoleKey.Enter:
+                    sfx.PlayMenuSelect();
                     var shouldExit = await ExecuteSelectionAsync(cancellationToken);
                     if (shouldExit)
                     {

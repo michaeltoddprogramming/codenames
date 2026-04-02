@@ -21,7 +21,7 @@ public class ApiClient(HttpClient http, AuthSession session)
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, bool bearer, CancellationToken cancellationToken)
     {
         using var request = BuildRequest(method, path, body, bearer);
-        var response = await http.SendAsync(request, cancellationToken);
+        using var response = await http.SendAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken)
@@ -31,7 +31,7 @@ public class ApiClient(HttpClient http, AuthSession session)
     private async Task SendVoidAsync(HttpMethod method, string path, object? body, bool bearer, CancellationToken cancellationToken)
     {
         using var request = BuildRequest(method, path, body, bearer);
-        var response = await http.SendAsync(request, cancellationToken);
+        using var response = await http.SendAsync(request, cancellationToken);
 
         await EnsureSuccessAsync(response, cancellationToken);
     }

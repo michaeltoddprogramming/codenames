@@ -9,6 +9,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +23,8 @@ import java.util.List;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthFilter.class);
 
     @Value("${jwt.secret}")
     private String secret;
@@ -55,7 +59,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 var auth      = new UsernamePasswordAuthenticationToken(principal, null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
-            } catch (io.jsonwebtoken.JwtException | NumberFormatException ignored) {}
+            } catch (io.jsonwebtoken.JwtException | NumberFormatException ex) {
+                logger.warn("JWT authentication failed for {}: {}", request.getRequestURI(), ex.getMessage());
+            }
         }
 
         chain.doFilter(request, response);

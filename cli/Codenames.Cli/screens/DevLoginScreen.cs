@@ -42,7 +42,7 @@ public class DevLoginScreen(
 
             await navigator.GoToAsync(ScreenName.MainMenu, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not NavigateException)
         {
             logger.LogError(ex, "[DEV] Login failed for {Username}", username);
             renderer.RenderBlankLine();

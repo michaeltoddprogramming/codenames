@@ -25,7 +25,7 @@ public record GameStateResponse(
         public static WordResponse from(GameWord gameWord) {
             return new WordResponse(
                 gameWord.word(),
-                gameWord.category(),
+                gameWord.revealed() ? gameWord.category() : null,
                 gameWord.revealed()
             );
         }

@@ -10,6 +10,7 @@ public class GameResultScreen(
     LobbySession lobbySession,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
+    SfxPlayer sfx,
     INavigator navigator) : IScreen
 {
     private static readonly Random Rng = new();
@@ -17,6 +18,14 @@ public class GameResultScreen(
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
         var result = lobbySession.CurrentGameResult;
+
+        // Play game result sound
+        if (result?.Winner is null)
+            sfx.PlayGameDraw();
+        else if (result.Winner.Equals(result.MyTeam, StringComparison.OrdinalIgnoreCase))
+            sfx.PlayGameWon();
+        else
+            sfx.PlayGameLost();
 
         // Confetti animation loop for 2 seconds (8 redraws at 250ms)
         if (result?.Winner is not null)
@@ -66,7 +75,7 @@ public class GameResultScreen(
         {
             AnsiConsole.Write(new FigletText("DRAW").Color(Color.Yellow).Centered());
         }
-        else if (result.Winner.Equals(result.MyTeam, StringComparison.OrdinalIgnoreCase))
+        else if (result.Winner.Equals("red", StringComparison.OrdinalIgnoreCase))
         {
             AnsiConsole.Write(new FigletText("RED WINS").Color(Color.Red).Centered());
         }

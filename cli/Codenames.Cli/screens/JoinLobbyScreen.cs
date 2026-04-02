@@ -46,7 +46,7 @@ public class JoinLobbyScreen(
             await navigator.GoToAsync(ScreenName.LobbyRoom, cancellationToken);
             return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not NavigateException)
         {
             renderer.RenderBlankLine();
             renderer.RenderError($"Failed to join lobby: {ex.Message}");

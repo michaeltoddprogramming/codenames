@@ -18,6 +18,7 @@ public class LobbyRoomScreen(
     SseClient sseClient,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
+    SfxPlayer sfx,
     INavigator navigator,
     ILogger<LobbyRoomScreen> logger) : IScreen
 {
@@ -343,8 +344,17 @@ public class LobbyRoomScreen(
 
             TerminalRenderer.EndFrame();
 
+            // Play SFX *after* the frame is flushed so the beep is
+            // perceived at the same instant the number appears.
             if (remaining > 0)
+            {
+                sfx.PlayCountdownTick(remaining);
                 await Task.Delay(1000, cancellationToken);
+            }
+            else
+            {
+                sfx.PlayCountdownGo();
+            }
         }
 
         await navigator.GoToAsync(ScreenName.Board, cancellationToken);

@@ -39,7 +39,7 @@ public class LoginScreen(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not NavigateException)
         {
             logger.LogError(ex, "Login failed");
             renderer.RenderBlankLine();

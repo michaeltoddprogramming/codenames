@@ -30,18 +30,21 @@ public class MatchTimerService {
     private final SseEmitterRegistry sseEmitterRegistry;
     private final ClueTimerService clueTimerService;
     private final VoteTimerService voteTimerService;
+    private final GameLockProvider gameLockProvider;
 
     public MatchTimerService(
             GameRepository gameRepository,
             SseBroadcaster sseBroadcaster,
             SseEmitterRegistry sseEmitterRegistry,
             ClueTimerService clueTimerService,
-            VoteTimerService voteTimerService) {
+            VoteTimerService voteTimerService,
+            GameLockProvider gameLockProvider) {
         this.gameRepository = gameRepository;
         this.sseBroadcaster = sseBroadcaster;
         this.sseEmitterRegistry = sseEmitterRegistry;
         this.clueTimerService = clueTimerService;
         this.voteTimerService = voteTimerService;
+        this.gameLockProvider = gameLockProvider;
     }
 
     public void start(int gameId, int matchDurationMinutes) {
@@ -99,42 +102,49 @@ public class MatchTimerService {
         logger.info("Match timer expired for game {}", gameId);
 
         try {
-            int[] remaining = gameRepository.getGameRemainingCounts(gameId);
-            int redRemaining  = remaining[0];
-            int blueRemaining = remaining[1];
+            synchronized (gameLockProvider.get(gameId)) {
+                GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
+                if (!"active".equals(meta.status())) {
+                    logger.info("Game {} already ended — skipping match timer expiry", gameId);
+                    return;
+                }
 
-            String winner;
-            String reason;
+                int[] remaining = gameRepository.getGameRemainingCounts(gameId);
+                int redRemaining  = remaining[0];
+                int blueRemaining = remaining[1];
 
-            if (redRemaining < blueRemaining) {
-                winner = "red";
-                reason = "TIMER_EXPIRED";
-            } else if (blueRemaining < redRemaining) {
-                winner = "blue";
-                reason = "TIMER_EXPIRED";
-            } else {
-                winner = null;
-                reason = "DRAW";
+                String winner;
+                String reason;
+
+                if (redRemaining < blueRemaining) {
+                    winner = "red";
+                    reason = "TIMER_EXPIRED";
+                } else if (blueRemaining < redRemaining) {
+                    winner = "blue";
+                    reason = "TIMER_EXPIRED";
+                } else {
+                    winner = null;
+                    reason = "DRAW";
+                }
+
+                clueTimerService.cancelAll(gameId);
+                voteTimerService.cancelAll(gameId);
+
+                gameRepository.endGame(gameId, winner, reason);
+
+                sseBroadcaster.broadcast(
+                    "game-" + gameId,
+                    GameEventType.GAME_ENDED.name(),
+                    Map.of(
+                        "winner", winner != null ? winner : "draw",
+                        "reason", reason,
+                        "redRemaining", redRemaining,
+                        "blueRemaining", blueRemaining
+                    )
+                );
+
+                scheduler.schedule(() -> sseEmitterRegistry.removeChannel("game-" + gameId), 3, TimeUnit.SECONDS);
             }
-
-            clueTimerService.cancelAll(gameId);
-            voteTimerService.cancelAll(gameId);
-
-            gameRepository.endGame(gameId, winner, reason);
-
-            sseBroadcaster.broadcast(
-                "game-" + gameId,
-                GameEventType.GAME_ENDED.name(),
-                Map.of(
-                    "winner", winner != null ? winner : "draw",
-                    "reason", reason,
-                    "redRemaining", redRemaining,
-                    "blueRemaining", blueRemaining
-                )
-            );
-
-            scheduler.schedule(() -> sseEmitterRegistry.removeChannel("game-" + gameId), 3, TimeUnit.SECONDS);
-
         } catch (Exception e) {
             logger.error("Error ending game {} on timer expiry: {}", gameId, e.getMessage(), e);
         }

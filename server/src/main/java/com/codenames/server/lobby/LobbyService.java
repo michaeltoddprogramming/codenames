@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -30,6 +31,11 @@ public class LobbyService {
 
     private static final Logger logger = LoggerFactory.getLogger(LobbyService.class);
     private static final Duration LOBBY_MAX_AGE = Duration.ofMinutes(30);
+    private final ConcurrentHashMap<String, Object> lobbyLocks = new ConcurrentHashMap<>();
+
+    private Object lobbyLock(String lobbyId) {
+        return lobbyLocks.computeIfAbsent(lobbyId, k -> new Object());
+    }
 
     private final LobbyRepository lobbyRepository;
     private final GameRepository gameRepository;
@@ -89,28 +95,31 @@ public class LobbyService {
     }
 
     public void leaveLobby(String lobbyId, User user) {
-        Lobby lobby = getLobbyById(lobbyId);
-        if (!lobby.hasParticipant(user.userId())) {
-            throw new IllegalStateException("You are not in this lobby");
+        synchronized (lobbyLock(lobbyId)) {
+            Lobby lobby = getLobbyById(lobbyId);
+            if (!lobby.hasParticipant(user.userId())) {
+                throw new IllegalStateException("You are not in this lobby");
+            }
+
+            lobby.removeParticipant(user.userId());
+
+            if (lobby.isEmpty()) {
+                lobbyRepository.remove(lobbyId);
+                lobbyLocks.remove(lobbyId);
+                sseEmitterRegistry.removeChannel(lobbyId);
+                return;
+            }
+
+            if (lobby.hostUserId() == user.userId()) {
+                LobbyParticipant newHost = lobby.participants().iterator().next();
+                lobby.transferHost(newHost.userId());
+            }
+
+            sseBroadcaster.broadcast(lobbyId, LobbyEventType.PLAYER_LEFT.name(),
+                    Map.of("userId", user.userId(), "username", user.username()));
+            sseBroadcaster.broadcast(lobbyId, LobbyEventType.LOBBY_SNAPSHOT.name(),
+                LobbyStateResponse.from(lobby, matchDurationMinutes));
         }
-
-        lobby.removeParticipant(user.userId());
-
-        if (lobby.isEmpty()) {
-            lobbyRepository.remove(lobbyId);
-            sseEmitterRegistry.removeChannel(lobbyId);
-            return;
-        }
-
-        if (lobby.hostUserId() == user.userId()) {
-            LobbyParticipant newHost = lobby.participants().iterator().next();
-            lobby.transferHost(newHost.userId());
-        }
-
-        sseBroadcaster.broadcast(lobbyId, LobbyEventType.PLAYER_LEFT.name(),
-                Map.of("userId", user.userId(), "username", user.username()));
-        sseBroadcaster.broadcast(lobbyId, LobbyEventType.LOBBY_SNAPSHOT.name(),
-            LobbyStateResponse.from(lobby, matchDurationMinutes));
     }
 
     public void ensureParticipant(String lobbyId, int userId) {
@@ -121,47 +130,50 @@ public class LobbyService {
     }
 
     public int startGame(String lobbyId, User user) {
-        Lobby lobby = getLobbyById(lobbyId);
-        if (lobby.hostUserId() != user.userId()) {
-            throw new IllegalStateException("Only the host can start the game");
-        }
-
-        if (lobby.participants().size() < 4) {
-            throw new IllegalStateException("At least 4 players are required to start the game");
-        }
-
-        List<String> words = wordBank.selectRandom(25);
-        List<Map.Entry<String, Integer>> categoryConfig = List.of(
-            Map.entry(GameWord.CATEGORY_RED,      8),
-            Map.entry(GameWord.CATEGORY_BLUE,     8),
-            Map.entry(GameWord.CATEGORY_NEUTRAL,  8),
-            Map.entry(GameWord.CATEGORY_ASSASSIN, 1)
-        );
-
-        List<Map<String, String>> wordList = new ArrayList<>();
-        int index = 0;
-        for (var entry : categoryConfig) {
-            for (int i = 0; i < entry.getValue(); i++) {
-                wordList.add(Map.of("word", words.get(index++), "word_type", entry.getKey()));
+        synchronized (lobbyLock(lobbyId)) {
+            Lobby lobby = getLobbyById(lobbyId);
+            if (lobby.hostUserId() != user.userId()) {
+                throw new IllegalStateException("Only the host can start the game");
             }
+
+            if (lobby.participants().size() < 4) {
+                throw new IllegalStateException("At least 4 players are required to start the game");
+            }
+
+            List<String> words = wordBank.selectRandom(25);
+            List<Map.Entry<String, Integer>> categoryConfig = List.of(
+                Map.entry(GameWord.CATEGORY_RED,      8),
+                Map.entry(GameWord.CATEGORY_BLUE,     8),
+                Map.entry(GameWord.CATEGORY_NEUTRAL,  8),
+                Map.entry(GameWord.CATEGORY_ASSASSIN, 1)
+            );
+
+            List<Map<String, String>> wordList = new ArrayList<>();
+            int index = 0;
+            for (var entry : categoryConfig) {
+                for (int i = 0; i < entry.getValue(); i++) {
+                    wordList.add(Map.of("word", words.get(index++), "word_type", entry.getKey()));
+                }
+            }
+
+            int gameId = gameRepository.createGame(wordList, matchDurationMinutes);
+            List<Map<String, Object>> participants = assignTeamsAndRoles(lobby);
+            gameRepository.insertParticipants(gameId, participants);
+
+            sseBroadcaster.broadcast(lobbyId, LobbyEventType.GAME_STARTED.name(), Map.of("gameId", gameId));
+            lobbyRepository.remove(lobbyId);
+            lobbyLocks.remove(lobbyId);
+            sseEmitterRegistry.removeChannel(lobbyId);
+
+            clueTimerService.start(gameId, "red");
+            clueTimerService.start(gameId, "blue");
+            matchTimerService.start(gameId, matchDurationMinutes);
+
+            sseBroadcaster.broadcast("game-" + gameId, GameEventType.ROUND_STARTED.name(), Map.of("team", "red"));
+            sseBroadcaster.broadcast("game-" + gameId, GameEventType.ROUND_STARTED.name(), Map.of("team", "blue"));
+
+            return gameId;
         }
-
-        int gameId = gameRepository.createGame(wordList, matchDurationMinutes);
-        List<Map<String, Object>> participants = assignTeamsAndRoles(lobby);
-        gameRepository.insertParticipants(gameId, participants);
-
-        sseBroadcaster.broadcast(lobbyId, LobbyEventType.GAME_STARTED.name(), Map.of("gameId", gameId));
-        lobbyRepository.remove(lobbyId);
-        sseEmitterRegistry.removeChannel(lobbyId);
-
-        clueTimerService.start(gameId, "red");
-        clueTimerService.start(gameId, "blue");
-        matchTimerService.start(gameId, matchDurationMinutes);
-
-        sseBroadcaster.broadcast("game-" + gameId, GameEventType.ROUND_STARTED.name(), Map.of("team", "red"));
-        sseBroadcaster.broadcast("game-" + gameId, GameEventType.ROUND_STARTED.name(), Map.of("team", "blue"));
-
-        return gameId;
     }
 
     public Optional<LobbyStateResponse> findMyLobby(User user) {

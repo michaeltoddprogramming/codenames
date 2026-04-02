@@ -10,15 +10,18 @@ public class ClueManager
 {
     private readonly GameApiClient _gameApiClient;
     private readonly TerminalRenderer _renderer;
+    private readonly SfxPlayer? _sfx;
     private readonly ILogger<ClueManager>? _logger;
 
     public ClueManager(
         GameApiClient gameApiClient,
         TerminalRenderer renderer,
+        SfxPlayer? sfx = null,
         ILogger<ClueManager>? logger = null)
     {
         _gameApiClient = gameApiClient;
         _renderer = renderer;
+        _sfx = sfx;
         _logger = logger;
     }
 
@@ -83,6 +86,7 @@ public class ClueManager
             if (lastSpace < 1)
             {
                 ShowInputError("Format must be: WORD NUMBER  (e.g. WATER 3)");
+                _sfx?.PlayError();
                 await Task.Delay(1200, cancellationToken);
                 continue;
             }
@@ -93,6 +97,7 @@ public class ClueManager
             if (string.IsNullOrEmpty(word) || word.Contains(' '))
             {
                 ShowInputError("Clue must be a single word.");
+                _sfx?.PlayError();
                 await Task.Delay(1200, cancellationToken);
                 continue;
             }
@@ -100,6 +105,7 @@ public class ClueManager
             if (!int.TryParse(numStr, out var clueNumber) || clueNumber < 1 || clueNumber > 9)
             {
                 ShowInputError("Number must be between 1 and 9.");
+                _sfx?.PlayError();
                 await Task.Delay(1200, cancellationToken);
                 continue;
             }
@@ -112,6 +118,7 @@ public class ClueManager
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "Failed to submit clue");
+                _sfx?.PlayError();
 
                 _renderer.Clear();
                 AnsiConsole.MarkupLine("[yellow]Give clue[/]");

@@ -16,6 +16,7 @@ public class MainMenuScreen(
     LobbyApiClient lobbyApiClient,
     TerminalRenderer renderer,
     KeyboardHandler keyboard,
+    SfxPlayer sfx,
     INavigator navigator,
     ILogger<MainMenuScreen> logger) : IScreen
 {
@@ -46,15 +47,18 @@ public class MainMenuScreen(
             {
                 case ConsoleKey.UpArrow:
                     _selectedIndex = Math.Max(0, _selectedIndex - 1);
+                    sfx.PlayCursorMove();
                     Draw();
                     break;
 
                 case ConsoleKey.DownArrow:
                     _selectedIndex = Math.Min(_menuItems.Length - 1, _selectedIndex + 1);
+                    sfx.PlayCursorMove();
                     Draw();
                     break;
 
                 case ConsoleKey.Enter:
+                    sfx.PlayMenuSelect();
                     var shouldExit = await ExecuteSelectionAsync(cancellationToken);
                     if (shouldExit) return;
                     Draw();

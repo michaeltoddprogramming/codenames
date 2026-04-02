@@ -6,21 +6,27 @@ public class LobbySession
 {
     private readonly object _sync = new();
 
-    public LobbyStateResponse? CurrentLobby { get; private set; }
-    public bool IsHost { get; private set; }
-    public int? CurrentUserId { get; private set; }
-    public int? CurrentGameId { get; private set; }
-    public GameEndResult? CurrentGameResult { get; private set; }
+    private LobbyStateResponse? _currentLobby;
+    private bool _isHost;
+    private int? _currentUserId;
+    private int? _currentGameId;
+    private GameEndResult? _currentGameResult;
+
+    public LobbyStateResponse? CurrentLobby { get { lock (_sync) return _currentLobby; } }
+    public bool IsHost { get { lock (_sync) return _isHost; } }
+    public int? CurrentUserId { get { lock (_sync) return _currentUserId; } }
+    public int? CurrentGameId { get { lock (_sync) return _currentGameId; } }
+    public GameEndResult? CurrentGameResult { get { lock (_sync) return _currentGameResult; } }
 
     public void SetLobby(LobbyStateResponse lobby, int currentUserId)
     {
         lock (_sync)
         {
-            CurrentLobby = lobby;
-            IsHost = lobby.HostUserId == currentUserId;
-            CurrentUserId = currentUserId;
-            CurrentGameId = null;
-            CurrentGameResult = null;
+            _currentLobby = lobby;
+            _isHost = lobby.HostUserId == currentUserId;
+            _currentUserId = currentUserId;
+            _currentGameId = null;
+            _currentGameResult = null;
         }
     }
 
@@ -28,7 +34,7 @@ public class LobbySession
     {
         lock (_sync)
         {
-            CurrentGameId = gameId;
+            _currentGameId = gameId;
         }
     }
 
@@ -36,7 +42,7 @@ public class LobbySession
     {
         lock (_sync)
         {
-            CurrentGameResult = result;
+            _currentGameResult = result;
         }
     }
 
@@ -44,11 +50,11 @@ public class LobbySession
     {
         lock (_sync)
         {
-            CurrentLobby = null;
-            IsHost = false;
-            CurrentUserId = null;
-            CurrentGameId = null;
-            CurrentGameResult = null;
+            _currentLobby = null;
+            _isHost = false;
+            _currentUserId = null;
+            _currentGameId = null;
+            _currentGameResult = null;
         }
     }
 }

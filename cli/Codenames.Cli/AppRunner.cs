@@ -19,7 +19,7 @@ public class AppRunner(INavigator navigator, ILogger<AppRunner> logger)
 
         try
         {
-            await _navigator.GoToAsync(ScreenName.Welcome, cancellationToken);
+            await _navigator.RunAsync(ScreenName.Welcome, cancellationToken);
         }
         catch (OperationCanceledException)
         {

@@ -19,6 +19,7 @@ public class BoardScreen(
     TerminalRenderer renderer,
     INavigator navigator,
     LobbySession lobbySession,
+    SfxPlayer sfx,
     ILogger<BoardScreen> logger) : IScreen
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
@@ -31,7 +32,8 @@ public class BoardScreen(
     private readonly INavigator _navigator = navigator;
     private readonly LobbySession _lobbySession = lobbySession;
     private readonly ILogger<BoardScreen> _logger = logger;
-    private readonly ClueManager _clueManager = new ClueManager(gameApi, renderer);
+    private readonly ClueManager _clueManager = new ClueManager(gameApi, renderer, sfx);
+    private readonly SfxPlayer _sfx = sfx;
 
     private readonly object _sync = new();
     private List<WordCard> _cards = [];
@@ -59,6 +61,7 @@ public class BoardScreen(
 
     private int _cursorRow;
     private int _cursorCol;
+    private bool _timerWarningPlayed;
 
     public async Task RenderAsync(CancellationToken cancellationToken = default)
     {
@@ -165,6 +168,17 @@ public class BoardScreen(
             _revealAnimationStart = null;
         }
 
+        // Timer warning beep when <=10 seconds remaining
+        if (_roundTimerEndsAt.HasValue)
+        {
+            var secondsLeft = (_roundTimerEndsAt.Value - DateTimeOffset.UtcNow).TotalSeconds;
+            if (secondsLeft is <= 10 and > 0 && !_timerWarningPlayed)
+            {
+                _timerWarningPlayed = true;
+                _sfx.PlayTimerWarning();
+            }
+        }
+
         Draw();
         return RedrawEveryMs;
     }
@@ -187,10 +201,10 @@ public class BoardScreen(
         {
             switch (key.Key)
             {
-                case ConsoleKey.UpArrow:    _cursorRow = Math.Max(0, _cursorRow - 1);        break;
-                case ConsoleKey.DownArrow:  _cursorRow = Math.Min(rows - 1, _cursorRow + 1); break;
-                case ConsoleKey.LeftArrow:  _cursorCol = Math.Max(0, _cursorCol - 1);        break;
-                case ConsoleKey.RightArrow: _cursorCol = Math.Min(cols - 1, _cursorCol + 1); break;
+                case ConsoleKey.UpArrow:    _cursorRow = Math.Max(0, _cursorRow - 1); _sfx.PlayCursorMove();       break;
+                case ConsoleKey.DownArrow:  _cursorRow = Math.Min(rows - 1, _cursorRow + 1); _sfx.PlayCursorMove(); break;
+                case ConsoleKey.LeftArrow:  _cursorCol = Math.Max(0, _cursorCol - 1); _sfx.PlayCursorMove();       break;
+                case ConsoleKey.RightArrow: _cursorCol = Math.Min(cols - 1, _cursorCol + 1); _sfx.PlayCursorMove(); break;
                 case ConsoleKey.Enter:      await SubmitVoteAsync(gameId, ct);               break;
             }
         }
@@ -218,6 +232,7 @@ public class BoardScreen(
 
         if (!hasActiveRound)
         {
+            _sfx.PlayError();
             lock (_sync)
             {
                 _statusMessage = "Waiting for your Spymaster's clue first...";
@@ -228,6 +243,7 @@ public class BoardScreen(
 
         if (alreadyVoted)
         {
+            _sfx.PlayError();
             lock (_sync)
             {
                 _statusMessage = $"Already voted for {card.Word} this round.";
@@ -238,6 +254,7 @@ public class BoardScreen(
 
         if (votesExhausted)
         {
+            _sfx.PlayError();
             lock (_sync)
             {
                 _statusMessage = $"You've used all {voteCap} vote(s) this round \u2014 waiting for tally.";
@@ -249,6 +266,7 @@ public class BoardScreen(
         try
         {
             await _gameApi.SubmitVoteAsync(gameId, card.Word, ct);
+            _sfx.PlayVoteCast();
             lock (_sync)
             {
                 _myVotedWords.Add(card.Word);
@@ -259,6 +277,7 @@ public class BoardScreen(
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to submit vote for {Word}", card.Word);
+            _sfx.PlayError();
             lock (_sync)
             {
                 _statusMessage = $"Vote failed: {ex.Message}";
@@ -353,6 +372,7 @@ public class BoardScreen(
             _statusMessageSetAt = DateTimeOffset.UtcNow;
             _dirty = true;
         }
+        _sfx.PlayClueGiven();
     }
 
     private void ApplyVoteCast(VoteCastPayload p)
@@ -371,6 +391,7 @@ public class BoardScreen(
 
     private void ApplyWordsRevealed(WordsRevealedPayload p)
     {
+        bool hasAssassin = false, hasCorrect = false, hasWrong = false;
         lock (_sync)
         {
             var revealedWords = new HashSet<string>();
@@ -387,6 +408,11 @@ public class BoardScreen(
 
                 if (category == WordCategory.RED)  _redRemaining  = Math.Max(0, _redRemaining  - 1);
                 if (category == WordCategory.BLUE) _blueRemaining = Math.Max(0, _blueRemaining - 1);
+
+                // Track reveal outcome for SFX
+                if (category == WordCategory.ASSASSIN) hasAssassin = true;
+                else if (w.WordType.Equals(p.Team, StringComparison.OrdinalIgnoreCase)) hasCorrect = true;
+                else hasWrong = true;
             }
             if (p.Team.Equals(_myTeam, StringComparison.OrdinalIgnoreCase))
             {
@@ -402,6 +428,11 @@ public class BoardScreen(
 
             _dirty = true;
         }
+
+        // Play appropriate reveal SFX
+        if (hasAssassin) _sfx.PlayRevealAssassin();
+        else if (hasWrong) _sfx.PlayRevealWrong();
+        else if (hasCorrect) _sfx.PlayRevealCorrect();
     }
 
     private void ApplyRoundStarted(TeamPayload p)
@@ -414,11 +445,10 @@ public class BoardScreen(
                 _myVotedWords  = new HashSet<string>();
                 _statusMessage = "Waiting for your Spymaster's clue...";
                 _statusMessageSetAt = DateTimeOffset.UtcNow;
-                // Don't null _roundTimerEndsAt here — CLUE_TIMER_STARTED may have
-                // already set a new value before this event arrives.
             }
             _dirty = true;
         }
+        _sfx.PlayRoundStarted();
     }
 
     private void ApplyTurnSkipped(TurnSkippedPayload p)
@@ -429,6 +459,7 @@ public class BoardScreen(
             _statusMessageSetAt = DateTimeOffset.UtcNow;
             _dirty = true;
         }
+        _sfx.PlayTurnSkipped();
     }
 
     private void ApplyTimerTick(TimerTickPayload p)
@@ -447,6 +478,7 @@ public class BoardScreen(
             if (!p.Team.Equals(_myTeam, StringComparison.OrdinalIgnoreCase)) return;
             _roundTimerEndsAt = DateTimeOffset.FromUnixTimeMilliseconds(p.EndsAtEpochMs);
             _roundTimerTotalSeconds = p.DurationSeconds;
+            _timerWarningPlayed = false;
             _dirty = true;
         }
     }
@@ -495,9 +527,6 @@ public class BoardScreen(
         }
 
         TerminalRenderer.StartFrame();
-
-        // Header
-        AnsiConsole.Write(new FigletText("Codenames").Color(Color.Gold1));
 
         // Role & Score bar
         var teamColor = myTeam.Equals("red", StringComparison.OrdinalIgnoreCase) ? "red" : "dodgerblue1";

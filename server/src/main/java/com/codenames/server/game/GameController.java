@@ -42,7 +42,9 @@ public class GameController {
     }
 
     @GetMapping("/{gameId}")
-    public ResponseEntity<GameStateResponse> getGame(@PathVariable int gameId) {
+    public ResponseEntity<GameStateResponse> getGame(
+            @PathVariable int gameId,
+            @AuthenticationPrincipal User user) {
         Game game = gameService.getGameById(gameId);
         return ResponseEntity.ok(GameStateResponse.from(game));
     }

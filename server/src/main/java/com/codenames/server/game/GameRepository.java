@@ -119,13 +119,16 @@ public class GameRepository {
             JOIN game_status gs ON gs.game_status_id = g.game_status_id
             WHERE g.game_id = ?
             """,
-            (resultSet, rowNum) -> new GameMeta(
-                resultSet.getInt("game_id"),
-                resultSet.getString("game_status"),
-                resultSet.getTimestamp("match_ends_at").toInstant(),
-                resultSet.getInt("red_remaining"),
-                resultSet.getInt("blue_remaining")
-            ),
+            (resultSet, rowNum) -> {
+                java.sql.Timestamp matchEndsAt = resultSet.getTimestamp("match_ends_at");
+                return new GameMeta(
+                    resultSet.getInt("game_id"),
+                    resultSet.getString("game_status"),
+                    matchEndsAt != null ? matchEndsAt.toInstant() : null,
+                    resultSet.getInt("red_remaining"),
+                    resultSet.getInt("blue_remaining")
+                );
+            },
             gameId
         );
         if (results.isEmpty()) {
@@ -224,7 +227,11 @@ public class GameRepository {
                 gameId, teamName, clueWord, clueNumber
             );
         } catch (Exception e) {
-            throw new RuntimeException("Failed to insert game round: " + rootMessage(e), e);
+            String msg = rootMessage(e);
+            if (msg.contains("already has an active round")) {
+                throw new IllegalStateException(msg, e);
+            }
+            throw new RuntimeException("Failed to insert game round: " + msg, e);
         }
 
         var results = jdbcTemplate.query(

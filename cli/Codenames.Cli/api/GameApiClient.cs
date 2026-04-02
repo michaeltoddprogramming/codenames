@@ -34,10 +34,6 @@ public class GameApiClient(ApiClient api)
         {
             return null;
         }
-        catch
-        {
-            return null;
-        }
     }
 
     private record ActiveGameResponse(int GameId);

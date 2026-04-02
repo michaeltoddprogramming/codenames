@@ -20,6 +20,7 @@ public class VoteTallyService {
 
     private static final Logger logger = LoggerFactory.getLogger(VoteTallyService.class);
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final GameLockProvider gameLockProvider;
 
     @PreDestroy
     public void shutdown() {
@@ -39,82 +40,92 @@ public class VoteTallyService {
             SseEmitterRegistry sseEmitterRegistry,
             ClueTimerService clueTimerService,
             VoteTimerService voteTimerService,
-            MatchTimerService matchTimerService) {
+            MatchTimerService matchTimerService,
+            GameLockProvider gameLockProvider) {
         this.gameRepository = gameRepository;
         this.sseBroadcaster = sseBroadcaster;
         this.sseEmitterRegistry = sseEmitterRegistry;
         this.clueTimerService = clueTimerService;
         this.voteTimerService = voteTimerService;
         this.matchTimerService = matchTimerService;
+        this.gameLockProvider = gameLockProvider;
     }
 
     public void tallyAndReveal(int gameId, String team, int roundId) {
-        logger.info("Tallying votes for game {} team {} round {}", gameId, team, roundId);
+        synchronized (gameLockProvider.get(gameId)) {
+            logger.info("Tallying votes for game {} team {} round {}", gameId, team, roundId);
 
-        GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
-        if (!"active".equals(meta.status())) {
-            logger.info("Game {} already ended — skipping tally for team {} round {}", gameId, team, roundId);
-            return;
+            GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
+            if (!"active".equals(meta.status())) {
+                logger.info("Game {} already ended — skipping tally for team {} round {}", gameId, team, roundId);
+                return;
+            }
+
+            if (gameRepository.findActiveRound(gameId, team).isEmpty()) {
+                logger.info("Round {} for game {} team {} already resolved — skipping duplicate tally", roundId, gameId, team);
+                return;
+            }
+
+            gameRepository.revealRoundWords(roundId);
+            gameRepository.resolveGameRound(roundId);
+
+            List<RoundResult> results = gameRepository.getRoundResults(roundId);
+
+            List<Map<String, Object>> wordPayload = results.stream()
+                .map(roundResult -> Map.<String, Object>of(
+                    "word", roundResult.word(),
+                    "wordType", roundResult.wordType(),
+                    "outcome", roundResult.outcome(),
+                    "voteCount", roundResult.voteCount()
+                ))
+                .collect(Collectors.toList());
+
+            sseBroadcaster.broadcast(
+                "game-" + gameId,
+                GameEventType.WORDS_REVEALED.name(),
+                Map.of("team", team, "words", wordPayload)
+            );
+
+            boolean hitAssassin = results.stream().anyMatch(RoundResult::isAssassin);
+            if (hitAssassin) {
+                String loser = team;
+                String winner = "red".equals(loser) ? "blue" : "red";
+                logger.info("Assassin hit by team {} in game {} — {} wins", loser, gameId, winner);
+                endGameLocked(gameId, winner, "ASSASSIN");
+                return;
+            }
+
+            int[] remaining = gameRepository.getGameRemainingCounts(gameId);
+            int redRemaining  = remaining[0];
+            int blueRemaining = remaining[1];
+
+            if (redRemaining == 0) {
+                logger.info("Red revealed all words in game {}", gameId);
+                endGameLocked(gameId, "red", "ALL_REVEALED");
+                return;
+            }
+            if (blueRemaining == 0) {
+                logger.info("Blue revealed all words in game {}", gameId);
+                endGameLocked(gameId, "blue", "ALL_REVEALED");
+                return;
+            }
+
+            clueTimerService.start(gameId, team);
+            sseBroadcaster.broadcast(
+                "game-" + gameId,
+                GameEventType.ROUND_STARTED.name(),
+                Map.of("team", team)
+            );
         }
-
-        if (gameRepository.findActiveRound(gameId, team).isEmpty()) {
-            logger.info("Round {} for game {} team {} already resolved — skipping duplicate tally", roundId, gameId, team);
-            return;
-        }
-
-        gameRepository.revealRoundWords(roundId);
-        gameRepository.resolveGameRound(roundId);
-
-        List<RoundResult> results = gameRepository.getRoundResults(roundId);
-
-        List<Map<String, Object>> wordPayload = results.stream()
-            .map(roundResult -> Map.<String, Object>of(
-                "word", roundResult.word(),
-                "wordType", roundResult.wordType(),
-                "outcome", roundResult.outcome(),
-                "voteCount", roundResult.voteCount()
-            ))
-            .collect(Collectors.toList());
-
-        sseBroadcaster.broadcast(
-            "game-" + gameId,
-            GameEventType.WORDS_REVEALED.name(),
-            Map.of("team", team, "words", wordPayload)
-        );
-
-        boolean hitAssassin = results.stream().anyMatch(RoundResult::isAssassin);
-        if (hitAssassin) {
-            String loser = team;
-            String winner = "red".equals(loser) ? "blue" : "red";
-            logger.info("Assassin hit by team {} in game {} — {} wins", loser, gameId, winner);
-            endGame(gameId, winner, "ASSASSIN");
-            return;
-        }
-
-        int[] remaining = gameRepository.getGameRemainingCounts(gameId);
-        int redRemaining  = remaining[0];
-        int blueRemaining = remaining[1];
-
-        if (redRemaining == 0) {
-            logger.info("Red revealed all words in game {}", gameId);
-            endGame(gameId, "red", "ALL_REVEALED");
-            return;
-        }
-        if (blueRemaining == 0) {
-            logger.info("Blue revealed all words in game {}", gameId);
-            endGame(gameId, "blue", "ALL_REVEALED");
-            return;
-        }
-
-        clueTimerService.start(gameId, team);
-        sseBroadcaster.broadcast(
-            "game-" + gameId,
-            GameEventType.ROUND_STARTED.name(),
-            Map.of("team", team)
-        );
     }
 
     public void endGame(int gameId, String winnerTeam, String reason) {
+        synchronized (gameLockProvider.get(gameId)) {
+            endGameLocked(gameId, winnerTeam, reason);
+        }
+    }
+
+    private void endGameLocked(int gameId, String winnerTeam, String reason) {
         GameRepository.GameMeta meta = gameRepository.getGameMeta(gameId);
         if (!"active".equals(meta.status())) {
             logger.info("Game {} already ended — skipping duplicate endGame (winner={}, reason={})", gameId, winnerTeam, reason);

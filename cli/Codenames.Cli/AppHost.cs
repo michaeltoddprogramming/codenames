@@ -21,6 +21,7 @@ public static class AppHost
                 // TUI
                 services.AddSingleton<TerminalRenderer>();
                 services.AddSingleton<KeyboardHandler>();
+                services.AddSingleton<SfxPlayer>();
 
                 // Navigation
                 services.AddSingleton<ScreenFactory>();
@@ -52,6 +53,11 @@ public static class AppHost
                 {
                     var config = serviceProvider.GetRequiredService<IOptions<AuthConfig>>().Value;
                     client.BaseAddress = new Uri(config.ServerBaseUrl);
+                })
+                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback =
+                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
                 });
 
                 // Screens

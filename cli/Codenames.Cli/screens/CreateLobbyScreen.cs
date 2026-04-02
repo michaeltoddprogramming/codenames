@@ -37,7 +37,7 @@ public class CreateLobbyScreen(
             await navigator.GoToAsync(ScreenName.LobbyRoom, cancellationToken);
             return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not NavigateException)
         {
             renderer.RenderBlankLine();
             renderer.RenderError($"Failed to create lobby: {ex.Message}");

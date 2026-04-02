@@ -1,0 +1,410 @@
+@startuml UC1_Login
+title UC1 — Log In
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Launch application
+CLI -> CLI : Open browser for OAuth login
+CLI -> Server : POST /auth/login (OAuth token)
+Server -> Server : Validate OAuth token
+
+alt Successful Login
+    Server -> DB : SELECT user by oauth_provider + oauth_subject
+    alt User Exists
+        DB --> Server : Return existing user
+    else New User
+        DB --> Server : No user found
+        Server -> DB : INSERT INTO user (username, email, oauth_provider, oauth_subject)
+        DB --> Server : Return new user
+    end
+    Server --> CLI : 200 OK (userId, token)
+    CLI --> User : Display Main Menu
+else Invalid Token
+    Server --> CLI : 401 Unauthorized
+    CLI --> User : Display "Login failed" error
+else Server Unreachable
+    CLI --> User : Display "Cannot connect to server" error
+end
+
+@enduml
+
+
+@startuml UC2_Logout
+title UC2 — Log Out
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+
+User -> CLI : Select "Log Out"
+
+alt User Is In Active Game
+    CLI --> User : Display "Leave game first" warning
+else User Not In Game
+    CLI -> Server : POST /auth/logout (token)
+    alt Successful Logout
+        Server -> Server : Invalidate session token
+        Server --> CLI : 200 OK
+        CLI -> CLI : Clear local auth session
+        CLI --> User : Display Welcome Screen
+    else Server Unreachable
+        CLI -> CLI : Clear local auth session anyway
+        CLI --> User : Display Welcome Screen
+    end
+end
+
+@enduml
+
+
+@startuml UC3_CreateLobby
+title UC3 — Create New Lobby
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Select "Create Lobby"
+CLI -> CLI : Prompt for match duration
+User -> CLI : Enter duration (minutes)
+
+CLI -> Server : POST /api/lobbies (matchDurationMinutes)
+
+alt Successful Creation
+    Server -> Server : Generate unique lobby code
+    Server --> CLI : 200 OK (lobbyId, code, participants)
+    CLI -> Server : SSE /api/lobbies/{lobbyId}/events
+    Server --> CLI : Stream connection established
+    CLI --> User : Display Lobby Room with join code
+else User Already In a Lobby
+    Server --> CLI : 409 Conflict
+    CLI --> User : Display "Already in a lobby" error
+else Server Error
+    Server --> CLI : 500 Internal Server Error
+    CLI --> User : Display "Failed to create lobby" error
+end
+
+@enduml
+
+
+@startuml UC4_JoinLobby
+title UC4 — Join Existing Lobby
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Select "Join Lobby"
+CLI --> User : Prompt for lobby code
+User -> CLI : Enter lobby code
+
+CLI -> Server : POST /api/lobbies/join (code)
+
+alt Successful Join
+    Server -> DB : SELECT lobby by code
+    DB --> Server : Return lobby details
+    Server -> Server : Add participant to lobby
+    Server --> CLI : 200 OK (lobbyId, code, participants)
+    CLI -> Server : SSE /api/lobbies/{lobbyId}/events
+    Server --> CLI : LOBBY_SNAPSHOT event
+    CLI --> User : Display Lobby Room
+else Invalid Code
+    Server --> CLI : 404 Not Found
+    CLI --> User : Display "Lobby not found" error
+else Lobby Is Full
+    Server --> CLI : 409 Conflict
+    CLI --> User : Display "Lobby is full" error
+else Game Already Started
+    Server --> CLI : 400 Bad Request
+    CLI --> User : Display "Game already in progress" error
+end
+
+@enduml
+
+
+@startuml UC5_StartGame
+title UC5 — Start Game (includes UC6 — View Team Members)
+
+actor "Host" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Press Enter to start game
+
+alt Not Enough Players
+    CLI --> User : Display "At least 4 players required" error
+else Enough Players (4+)
+    CLI -> Server : POST /api/lobbies/{lobbyId}/start
+
+    alt Successful Start
+        Server -> Server : Randomly assign players to RED / BLUE teams
+        Server -> Server : Assign roles (spymaster / operative)
+        Server -> DB : INSERT INTO game (game_status_id, match_duration_minutes)
+        DB --> Server : Return new gameId
+        Server -> DB : CALL Proc_InsertGameParticipants (gameId, participants)
+        DB --> Server : Participants created
+        Server -> DB : INSERT INTO game_word (25 words with random word types)
+        DB --> Server : Words assigned
+        Server --> CLI : GAME_STARTED event via SSE (gameId)
+
+        == UC6 — View Team Members (extends Start Game) ==
+
+        CLI -> Server : GET /api/games/{gameId}/players
+        Server -> DB : SELECT participants with teams and roles
+        DB --> Server : Return player list
+        Server --> CLI : 200 OK (players grouped by team)
+        CLI --> User : Display team assignments with countdown
+        CLI --> User : Navigate to Game Board
+
+    else Server Error
+        Server --> CLI : 500 Internal Server Error
+        CLI --> User : Display "Failed to start game" error
+    end
+end
+
+@enduml
+
+
+@startuml UC7_ViewGameBoard
+title UC7 — View Game Board
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Enter Board Screen
+CLI -> Server : SSE /api/games/{gameId}/events
+Server --> CLI : Stream connection established
+
+Server -> DB : SELECT game state, words, active rounds, remaining counts
+DB --> Server : Return full game state
+Server --> CLI : GAME_SNAPSHOT event
+
+alt Player Is Spymaster
+    CLI -> CLI : Render board with ALL word types visible (colour coded)
+    CLI --> User : Display board with clue controls [C] give clue
+else Player Is Operative
+    CLI -> CLI : Render board with only revealed word types visible
+    CLI --> User : Display board with voting controls [Arrows + Enter]
+end
+
+loop Real-Time Updates via SSE
+    alt CLUE_GIVEN Event
+        Server --> CLI : Clue word, number, team
+        CLI --> User : Update clue panel
+    else VOTE_CAST Event
+        Server --> CLI : Word, team
+        CLI --> User : Update vote tally
+    else WORDS_REVEALED Event
+        Server --> CLI : Revealed words with types
+        CLI --> User : Update board cards with reveal animation
+    else TIMER_TICK Event
+        Server --> CLI : Seconds remaining
+        CLI --> User : Update match timer
+    else GAME_ENDED Event
+        Server --> CLI : Winner, reason, final scores
+        CLI --> User : Navigate to Game Result screen
+    end
+end
+
+@enduml
+
+
+@startuml UC8_ViewRevealedWords
+title UC8 — View Revealed Words
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Viewing board during active game
+
+Server --> CLI : WORDS_REVEALED SSE event (words, types, team)
+
+CLI -> CLI : Find matching word cards on board
+
+alt Word Is Red Team
+    CLI -> CLI : Mark card with RED colour
+else Word Is Blue Team
+    CLI -> CLI : Mark card with BLUE colour
+else Word Is Assassin
+    CLI -> CLI : Mark card with DARK/BLACK colour
+else Word Is Neutral
+    CLI -> CLI : Mark card with GREY colour
+end
+
+CLI -> CLI : Set card as revealed (no longer clickable)
+CLI -> CLI : Play reveal flash animation
+CLI -> CLI : Update remaining score counts
+
+alt Player Is Spymaster
+    CLI --> User : Display revealed card (was already visible)
+else Player Is Operative
+    CLI --> User : Display revealed card with newly visible type colour
+end
+
+@enduml
+
+
+@startuml UC9_SubmitClue
+title UC9 — Submit Clue (Spymaster Only)
+
+actor "Spymaster" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Press C to give clue
+CLI --> User : Display "Give Your Clue" input screen
+CLI --> User : Prompt format: WORD NUMBER
+
+User -> CLI : Type clue (e.g. "WATER 3")
+
+alt User Presses Escape
+    CLI --> User : Cancel and return to board
+else User Submits Input
+    CLI -> CLI : Parse input into word and number
+
+    alt Invalid Format (no space separator)
+        CLI --> User : Display "Format must be: WORD NUMBER" error
+    else Clue Contains Spaces
+        CLI --> User : Display "Clue must be a single word" error
+    else Number Out of Range (not 1-9)
+        CLI --> User : Display "Number must be between 1 and 9" error
+    else Valid Input
+        CLI -> Server : POST /api/games/{gameId}/clue (clueWord, clueNumber)
+
+        alt Successful Submission
+            Server -> DB : INSERT INTO game_round (game_id, game_team_id, clue_word, clue_number)
+            DB --> Server : Round created
+            Server --> CLI : 200 OK
+            Server --> CLI : CLUE_GIVEN SSE event (broadcast to all players)
+            CLI --> User : Return to board with clue displayed
+        else Already Submitted Clue This Round
+            Server --> CLI : 400 Bad Request
+            CLI --> User : Display "Already submitted a clue for this round"
+        else Game Not Active
+            Server --> CLI : 400 Bad Request
+            CLI --> User : Display "Game is not active" error
+        end
+    end
+end
+
+@enduml
+
+
+@startuml UC10_ViewClueHistory
+title UC10 — View Clue History
+
+actor "Game Participant" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+User -> CLI : Viewing board (clue panel always visible)
+
+note over CLI : Clue panel renders on every board redraw
+
+CLI -> CLI : Read active rounds from GAME_SNAPSHOT
+
+loop For Each Team (RED, BLUE)
+    alt Team Has Active Round With Clue
+        CLI --> User : Display "[TEAM]: CLUE_WORD x CLUE_NUMBER"
+        alt Votes Have Been Cast
+            CLI --> User : Display vote tallies next to clue
+        end
+    else Team Is Waiting For Clue
+        CLI --> User : Display "[TEAM]: Waiting for clue..."
+    end
+end
+
+note over CLI : History updates in real-time via SSE
+
+alt CLUE_GIVEN SSE Event Received
+    Server --> CLI : New clue (team, clueWord, clueNumber)
+    CLI -> CLI : Update active rounds dictionary
+    CLI --> User : Refresh clue panel with new clue
+end
+
+@enduml
+
+
+@startuml UC11_SubmitWordVote
+title UC11 — Submit Word Vote (includes UC12 — View Current Clue)
+
+actor "Operative" as User
+participant "CLI" as CLI
+participant "Java Server" as Server
+database "Database" as DB
+
+== UC12 — View Current Clue (extends Submit Word Vote) ==
+
+CLI -> CLI : Check active round for operative's team
+alt Active Round Exists
+    CLI --> User : Display current clue: "CLUE_WORD x NUMBER"
+    CLI --> User : Display vote count: "(votes_cast / clue_number)"
+else No Active Round
+    CLI --> User : Display "WAITING FOR SPYMASTER'S CLUE..." banner
+    note over User : Operative cannot vote until clue is given
+end
+
+== Vote Submission ==
+
+User -> CLI : Navigate to word card using Arrow keys
+User -> CLI : Press Enter to vote
+
+alt No Active Round For Team
+    CLI --> User : Display "Waiting for your Spymaster's clue first..."
+else Word Already Revealed
+    CLI -> CLI : Ignore vote (card not selectable)
+else Already Voted For This Word
+    CLI --> User : Display "Already voted for [WORD] this round"
+else All Votes Exhausted
+    CLI --> User : Display "You've used all N vote(s) — waiting for tally"
+else Valid Vote
+    CLI -> Server : POST /api/games/{gameId}/vote (word)
+
+    alt Successful Vote
+        Server -> DB : INSERT INTO round_vote (game_round_id, game_word_id, game_participant_id)
+        DB --> Server : Vote recorded
+        Server --> CLI : 200 OK
+        Server --> CLI : VOTE_CAST SSE event (broadcast to all players)
+        CLI --> User : Display "Voted for [WORD] (count/total)"
+
+        alt All Operatives Have Voted
+            Server -> Server : Resolve round
+            Server -> DB : CALL Proc_ResolveGameRound
+            Server -> DB : CALL Proc_RevealRoundWords
+            DB --> Server : Words revealed with outcomes
+            Server -> DB : UPDATE game remaining counts
+            Server --> CLI : WORDS_REVEALED SSE event
+            CLI --> User : Update board with revealed words
+
+            alt Assassin Word Revealed
+                Server -> DB : CALL Proc_EndGame (winner = other team, reason = assassin)
+                Server --> CLI : GAME_ENDED SSE event
+                CLI --> User : Navigate to Game Result screen
+            else All Team Words Found
+                Server -> DB : CALL Proc_EndGame (winner = team, reason = all words found)
+                Server --> CLI : GAME_ENDED SSE event
+                CLI --> User : Navigate to Game Result screen
+            else Normal Outcome
+                Server --> CLI : ROUND_STARTED SSE event (next team's turn)
+                CLI --> User : Update board for next round
+            end
+        end
+
+    else Vote Failed
+        Server --> CLI : 400 Bad Request
+        CLI --> User : Display "Vote failed: [reason]"
+    end
+end
+
+@enduml

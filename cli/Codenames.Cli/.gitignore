@@ -1,6 +1,7 @@
 bin/
 obj/
 logs/
+.env
 
 .vs/
 .idea/
