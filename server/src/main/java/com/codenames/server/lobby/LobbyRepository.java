@@ -55,6 +55,9 @@ public class LobbyRepository {
         Instant cutoff = Instant.now().minus(maxAge);
         List<String> removed = new ArrayList<>();
         for (Lobby lobby : byId.values()) {
+            // Never evict a lobby that still has active participants — only clean up
+            // truly abandoned (empty) lobbies that have been inactive past the cutoff
+            if (!lobby.isEmpty()) continue;
             if (lobby.lastActivityAt().isBefore(cutoff)) {
                 remove(lobby.lobbyId());
                 removed.add(lobby.lobbyId());

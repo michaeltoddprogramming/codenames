@@ -112,7 +112,7 @@ public class LobbyService {
             }
 
             if (lobby.hostUserId() == user.userId()) {
-                LobbyParticipant newHost = lobby.participants().iterator().next();
+                LobbyParticipant newHost = lobby.longestWaitingParticipant();
                 lobby.transferHost(newHost.userId());
             }
 

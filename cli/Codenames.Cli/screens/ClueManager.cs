@@ -170,7 +170,7 @@ public class ClueManager
                     }
                     continue;
                 }
-                if (!char.IsControl(key.KeyChar))
+                if (!char.IsControl(key.KeyChar) && buffer.Length < 45)
                 {
                     buffer.Append(key.KeyChar);
                     Console.Write(key.KeyChar);

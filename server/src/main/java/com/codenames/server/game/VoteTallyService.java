@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 public class VoteTallyService {
 
     private static final Logger logger = LoggerFactory.getLogger(VoteTallyService.class);
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
     private final GameLockProvider gameLockProvider;
 
     @PreDestroy

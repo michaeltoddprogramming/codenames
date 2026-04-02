@@ -3,6 +3,7 @@ package com.codenames.server.lobby;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Lobby {
 
@@ -10,6 +11,7 @@ public class Lobby {
     private final String code;
     private volatile int hostUserId;
     private final ConcurrentHashMap<Integer, LobbyParticipant> participants = new ConcurrentHashMap<>();
+    private final CopyOnWriteArrayList<Integer> joinOrder = new CopyOnWriteArrayList<>();
     private final Instant createdAt = Instant.now();
     private volatile Instant lastActivityAt = Instant.now();
 
@@ -19,6 +21,7 @@ public class Lobby {
         this.code = code;
         this.hostUserId = hostUserId;
         participants.put(hostUserId, new LobbyParticipant(hostUserId, hostUsername, hostEmail));
+        joinOrder.add(hostUserId);
     }
 
     public String lobbyId()           { return lobbyId; }
@@ -48,11 +51,22 @@ public class Lobby {
             return false;
         }
         participants.put(participant.userId(), participant);
+        joinOrder.add(participant.userId());
         return true;
     }
 
     public boolean removeParticipant(int userId) {
+        joinOrder.remove(Integer.valueOf(userId));
         return participants.remove(userId) != null;
+    }
+
+    /** Returns the participant who has been waiting the longest (first to join after the host leaves). */
+    public LobbyParticipant longestWaitingParticipant() {
+        for (int userId : joinOrder) {
+            LobbyParticipant p = participants.get(userId);
+            if (p != null) return p;
+        }
+        throw new IllegalStateException("No participants left in lobby " + lobbyId);
     }
 
     public boolean isEmpty() {

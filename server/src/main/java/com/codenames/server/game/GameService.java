@@ -52,8 +52,11 @@ public class GameService {
         if (request.clueWord() == null || request.clueWord().isBlank()) {
             throw new IllegalArgumentException("Clue word cannot be blank");
         }
-        if (request.clueNumber() < 1) {
-            throw new IllegalArgumentException("Clue number must be at least 1");
+        if (request.clueNumber() < 1 || request.clueNumber() > 9) {
+            throw new IllegalArgumentException("Clue number must be between 1 and 9");
+        }
+        if (request.clueWord().length() > 45) {
+            throw new IllegalArgumentException("Clue word must be 45 characters or fewer");
         }
 
         GameParticipantInfo participant = requireParticipant(gameId, user.userId());

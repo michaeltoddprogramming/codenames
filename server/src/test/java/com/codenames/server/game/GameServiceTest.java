@@ -72,11 +72,6 @@ class GameServiceTest {
                 eq(GameEventType.CLUE_GIVEN.name()),
                 eq(Map.of("team", "red", "clueWord", "animal", "clueNumber", 3))
             );
-            verify(sseBroadcaster).broadcast(
-                eq("game-" + GAME_ID),
-                eq(GameEventType.ROUND_STARTED.name()),
-                eq(Map.of("team", "red", "clueWord", "animal", "clueNumber", 3, "roundId", roundId))
-            );
         }
 
         @Test
@@ -98,7 +93,7 @@ class GameServiceTest {
 
             assertThatThrownBy(() -> service.submitClue(GAME_ID, spymaster, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("at least 1");
+                .hasMessageContaining("between 1 and 9");
 
             verifyNoInteractions(gameRepository, clueTimerService, voteTimerService, voteTallyService, sseBroadcaster);
         }

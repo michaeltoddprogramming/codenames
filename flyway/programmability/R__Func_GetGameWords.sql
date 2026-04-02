@@ -22,6 +22,6 @@ BEGIN
     JOIN word_type wt ON wt.word_type_id = gw.word_type_id
     WHERE gw.game_id = p_game_id
     AND   gw.is_deleted = FALSE
-    ORDER BY wt.type_name, gw.word;
+    ORDER BY gw.game_word_id;
 END;
 $$;

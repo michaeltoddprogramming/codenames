@@ -48,6 +48,7 @@ public class BoardScreen(
     private bool _snapshotReceived;
     private bool _gameEnded;
     private bool _dirty;
+    private bool _showHelp;
     private HashSet<string> _myVotedWords = [];
     private DateTimeOffset? _roundTimerEndsAt;
     private int _roundTimerTotalSeconds;
@@ -191,6 +192,12 @@ public class BoardScreen(
 
         const int cols = 5;
         int rows = cardCount > 0 ? cardCount / cols : 5;
+
+        if (key.KeyChar == '?')
+        {
+            lock (_sync) { _showHelp = !_showHelp; _dirty = true; }
+            return;
+        }
 
         if (isSpymaster)
         {
@@ -498,7 +505,7 @@ public class BoardScreen(
     private void Draw()
     {
         List<WordCard> cards;
-        bool   isSpymaster;
+        bool   isSpymaster, showHelp;
         string myTeam, myRole;
         Dictionary<string, ActiveRoundDetailView?> rounds;
         int    redRemaining, blueRemaining;
@@ -513,6 +520,7 @@ public class BoardScreen(
         {
             cards                  = new List<WordCard>(_cards);
             isSpymaster            = _isSpymaster;
+            showHelp               = _showHelp;
             myTeam                 = _myTeam;
             myRole                 = _myRole;
             rounds                 = new Dictionary<string, ActiveRoundDetailView?>(_activeRounds);
@@ -545,7 +553,7 @@ public class BoardScreen(
         // Instructions
         if (isSpymaster)
         {
-            AnsiConsole.MarkupLine("  [grey][[Spymaster]][/]  [bold gold1]C[/] [grey]give clue[/]  [bold gold1]Esc[/] [grey]exit[/]");
+            AnsiConsole.MarkupLine("  [grey][[Spymaster]][/]  [bold gold1]C[/] [grey]give clue[/]  [bold gold1]?[/] [grey]help[/]  [bold gold1]Esc[/] [grey]exit[/]");
         }
         else
         {
@@ -555,9 +563,9 @@ public class BoardScreen(
                 int cap  = myRound!.ClueNumber;
                 int cast = myVotedWords.Count;
                 if (cast < cap)
-                    AnsiConsole.MarkupLine($"  [grey][[Operative]][/]  [bold gold1]Arrows[/] [grey]move[/]  [bold gold1]Enter[/] [grey]vote[/] [dim]({cast}/{cap})[/]  [bold gold1]Esc[/] [grey]exit[/]");
+                    AnsiConsole.MarkupLine($"  [grey][[Operative]][/]  [bold gold1]Arrows[/] [grey]move[/]  [bold gold1]Enter[/] [grey]vote[/] [dim]({cast}/{cap})[/]  [bold gold1]?[/] [grey]help[/]  [bold gold1]Esc[/] [grey]exit[/]");
                 else
-                    AnsiConsole.MarkupLine($"  [grey][[Operative]][/]  [green]All {cap} vote(s) cast[/] [dim]awaiting tally...[/]  [bold gold1]Esc[/] [grey]exit[/]");
+                    AnsiConsole.MarkupLine($"  [grey][[Operative]][/]  [green]All {cap} vote(s) cast[/] [dim]awaiting tally...[/]  [bold gold1]?[/] [grey]help[/]  [bold gold1]Esc[/] [grey]exit[/]");
             }
             else
             {
@@ -640,6 +648,28 @@ public class BoardScreen(
             {
                 TerminalRenderer.RenderStatusPanel(status, "yellow");
             }
+        }
+
+        // Quick-help
+        if (showHelp)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.Write(new Rule("[bold gold1]Quick Reference  [dim](? to close)[/][/]").RuleStyle("gold1"));
+            var helpTable = new Table().Border(TableBorder.None).HideHeaders().AddColumn("").AddColumn("");
+            helpTable.AddRow("[bold gold1]?[/]",          "[grey]Toggle this help[/]");
+            helpTable.AddRow("[bold gold1]Esc[/]",         "[grey]Exit to main menu[/]");
+            if (isSpymaster)
+            {
+                helpTable.AddRow("[bold gold1]C[/]",       "[grey]Give a clue  (format: WORD NUMBER)[/]");
+            }
+            else
+            {
+                helpTable.AddRow("[bold gold1]Arrows[/]",  "[grey]Move cursor over board[/]");
+                helpTable.AddRow("[bold gold1]Enter[/]",   "[grey]Vote for selected word[/]");
+            }
+            helpTable.AddRow("[bold gold1]Goal[/]",        $"[grey]Reveal all 8 of your team's words first[/]");
+            helpTable.AddRow("[bold gold1]Assassin[/]",    "[red]Voting for it = instant loss[/]");
+            AnsiConsole.Write(helpTable);
         }
 
         TerminalRenderer.EndFrame();

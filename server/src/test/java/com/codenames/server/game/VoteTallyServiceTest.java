@@ -1,5 +1,6 @@
 package com.codenames.server.game;
 
+import com.codenames.server.game.dto.ActiveRound;
 import com.codenames.server.game.dto.RoundResult;
 import com.codenames.server.shared.sse.SseBroadcaster;
 import com.codenames.server.shared.sse.SseEmitterRegistry;
@@ -11,9 +12,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,18 +32,23 @@ class VoteTallyServiceTest {
     @Mock ClueTimerService clueTimerService;
     @Mock VoteTimerService voteTimerService;
     @Mock MatchTimerService matchTimerService;
+    @Mock GameLockProvider gameLockProvider;
 
     VoteTallyService service;
 
     @BeforeEach
     void setUp() {
+        Object sharedLock = new Object();
+        when(gameLockProvider.get(anyInt())).thenReturn(sharedLock);
+
         service = new VoteTallyService(
             gameRepository,
             sseBroadcaster,
             sseEmitterRegistry,
             clueTimerService,
             voteTimerService,
-            matchTimerService
+            matchTimerService,
+            gameLockProvider
         );
     }
 
@@ -52,6 +61,10 @@ class VoteTallyServiceTest {
         void endsGameWhenAssassinIsRevealed() {
             int gameId = 10;
             int roundId = 21;
+            when(gameRepository.getGameMeta(gameId)).thenReturn(
+                new GameRepository.GameMeta(gameId, "active", Instant.now().plusSeconds(300), 7, 6));
+            when(gameRepository.findActiveRound(gameId, "red")).thenReturn(
+                Optional.of(new ActiveRound(roundId, "DANGER", 2)));
             when(gameRepository.getRoundResults(roundId)).thenReturn(List.of(
                 new RoundResult(5, "VIPER", "assassin", "assassin", 2)
             ));
@@ -77,6 +90,10 @@ class VoteTallyServiceTest {
         void endsGameWhenRedWordsAreFinished() {
             int gameId = 10;
             int roundId = 22;
+            when(gameRepository.getGameMeta(gameId)).thenReturn(
+                new GameRepository.GameMeta(gameId, "active", Instant.now().plusSeconds(300), 1, 2));
+            when(gameRepository.findActiveRound(gameId, "red")).thenReturn(
+                Optional.of(new ActiveRound(roundId, "FIRE", 1)));
             when(gameRepository.getRoundResults(roundId)).thenReturn(List.of(
                 new RoundResult(1, "TIGER", "red", "correct", 3)
             ));
@@ -95,6 +112,10 @@ class VoteTallyServiceTest {
         void startsNextCluePhaseWhenGameContinues() {
             int gameId = 10;
             int roundId = 23;
+            when(gameRepository.getGameMeta(gameId)).thenReturn(
+                new GameRepository.GameMeta(gameId, "active", Instant.now().plusSeconds(300), 5, 4));
+            when(gameRepository.findActiveRound(gameId, "red")).thenReturn(
+                Optional.of(new ActiveRound(roundId, "WAVE", 2)));
             when(gameRepository.getRoundResults(roundId)).thenReturn(List.of(
                 new RoundResult(7, "OCEAN", "blue", "opponent", 2)
             ));
@@ -121,6 +142,8 @@ class VoteTallyServiceTest {
         @DisplayName("publishes GAME_ENDED payload with draw winner label when winner team is null")
         void publishesGameEndedWithDrawWinner() {
             int gameId = 44;
+            when(gameRepository.getGameMeta(gameId)).thenReturn(
+                new GameRepository.GameMeta(gameId, "active", Instant.now().plusSeconds(300), 3, 3));
             when(gameRepository.getGameRemainingCounts(gameId)).thenReturn(new int[]{3, 3});
 
             service.endGame(gameId, null, "DRAW");
