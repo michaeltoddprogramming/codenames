@@ -19,7 +19,7 @@ public class MainMenuScreen(
     INavigator navigator,
     ILogger<MainMenuScreen> logger) : IScreen
 {
-    private static readonly string[] BaseMenuItems = ["Create Lobby", "Join Lobby", "Logout"];
+    private static readonly string[] BaseMenuItems = ["Create Lobby", "Join Lobby", "How to Play", "Logout"];
     private const string RejoinGameItem  = "Rejoin Game";
     private const string RejoinLobbyItem = "Rejoin Lobby";
     private string[] _menuItems = BaseMenuItems;
@@ -72,6 +72,7 @@ public class MainMenuScreen(
             items.Add($"{RejoinLobbyItem} ({_existingLobby.Code})");
         items.Add("Create Lobby");
         items.Add("Join Lobby");
+        items.Add("How to Play");
         items.Add("Logout");
         return [.. items];
     }
@@ -131,10 +132,14 @@ public class MainMenuScreen(
             case "Join Lobby":
                 await navigator.GoToAsync(ScreenName.JoinLobby, cancellationToken);
                 return false;
+            case "How to Play":
+                await navigator.GoToAsync(ScreenName.Help, cancellationToken);
+                return false;
             case "Logout":
                 logger.LogInformation("User {Email} logged out", authSession.Email);
                 authSession.Clear();
                 lobbySession.Clear();
+                await navigator.GoToAsync(ScreenName.Welcome, cancellationToken);
                 return true;
             default:
                 return false;

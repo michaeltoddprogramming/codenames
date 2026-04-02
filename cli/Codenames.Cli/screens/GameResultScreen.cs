@@ -66,7 +66,7 @@ public class GameResultScreen(
         {
             AnsiConsole.Write(new FigletText("DRAW").Color(Color.Yellow).Centered());
         }
-        else if (result.Winner.Equals("red", StringComparison.OrdinalIgnoreCase))
+        else if (result.Winner.Equals(result.MyTeam, StringComparison.OrdinalIgnoreCase))
         {
             AnsiConsole.Write(new FigletText("RED WINS").Color(Color.Red).Centered());
         }
